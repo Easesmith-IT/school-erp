@@ -1,46 +1,27 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { store } from '@/lib/store';
-import { Activity, Send } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, MessageSquare, Send, XCircle } from 'lucide-react';
+import Link from 'next/link';
 
 export default function CommunicationAnalyticsPage() {
   const communications = store.getCommunications();
-
-  return (
-    <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Communication Analytics</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Dispatch volume, delivery rate, simulated vs live mode breakdown
-            </p>
-          </div>
-        </div>
-
-        {/* 3 KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-            <div className="text-xs font-semibold text-slate-500">Messages Sent</div>
-            <div className="text-2xl font-extrabold text-slate-900 mt-1">1,284</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Canonical total</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-            <div className="text-xs font-semibold text-slate-500">Delivery Rate</div>
-            <div className="text-2xl font-extrabold text-emerald-600 mt-1">93.5%</div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">High delivery compliance</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-            <div className="text-xs font-semibold text-slate-500">Failed Rate</div>
-            <div className="text-2xl font-extrabold text-red-600 mt-1">2.7%</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Invalid numbers / retry queue</div>
-          </div>
-        </div>
-      </div>
-    </AppShell>
-  );
+  const data = useMemo(() => {
+    const counts = communications.reduce<Record<string, number>>((a, c) => { a[c.status] = (a[c.status] || 0) + 1; return a; }, {});
+    const modes = communications.reduce<Record<string, number>>((a, c) => { a[c.mode] = (a[c.mode] || 0) + 1; return a; }, {});
+    const types = communications.reduce<Record<string, number>>((a, c) => { a[c.type] = (a[c.type] || 0) + 1; return a; }, {});
+    const delivered = counts.DELIVERED || 0; const failed = counts.FAILED || 0; const actionable = delivered + failed;
+    return { counts, modes, types, deliveryRate: actionable ? (delivered / actionable) * 100 : 0, recentFailures: communications.filter((c) => c.status === 'FAILED').slice(0, 6) };
+  }, [communications]);
+  const total = Math.max(communications.length, 1); const typeRows = Object.entries(data.types).sort((a, b) => b[1] - a[1]);
+  return <AppShell><div className="max-w-[1500px] mx-auto pb-12 space-y-5">
+    <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><div className="text-[11px] uppercase tracking-[0.12em] font-bold text-blue-600 mb-1">Communications / Intelligence</div><h1 className="text-2xl font-bold tracking-tight text-[#172033]">Communication Analytics</h1><p className="text-sm text-slate-500 mt-1">Measure dispatch volume, delivery reliability, operating mode and failure concentration.</p></div><Link href="/communications/history" className="px-3.5 py-2 rounded-lg bg-[#2563EB] text-white text-xs font-semibold">Open communication history →</Link></header>
+    <section className="grid grid-cols-2 lg:grid-cols-5 gap-4"><Metric title="Total Messages" value={communications.length.toLocaleString('en-IN')} sub="Canonical communication log" icon={MessageSquare} /><Metric title="Delivered" value={(data.counts.DELIVERED || 0).toLocaleString('en-IN')} sub={`${data.deliveryRate.toFixed(1)}% of delivered/failed`} icon={CheckCircle2} tone="emerald" /><Metric title="Failed" value={(data.counts.FAILED || 0).toLocaleString('en-IN')} sub="Needs retry or review" icon={XCircle} tone="rose" /><Metric title="Simulated" value={(data.counts.SIMULATED || 0).toLocaleString('en-IN')} sub="Demo-mode records" icon={Activity} tone="amber" /><Metric title="Live Mode" value={`${((data.modes.LIVE || 0) / total * 100).toFixed(1)}%`} sub={`${data.modes.LIVE || 0} live records`} icon={Send} tone="blue" /></section>
+    <section className="grid grid-cols-1 xl:grid-cols-[1fr_0.9fr] gap-4"><Panel title="Delivery funnel" subtitle="Actual status distribution in the communication log."><div className="space-y-3">{[['SENT', data.counts.SENT || 0, 'bg-blue-500'], ['DELIVERED', data.counts.DELIVERED || 0, 'bg-emerald-500'], ['FAILED', data.counts.FAILED || 0, 'bg-rose-500'], ['SIMULATED', data.counts.SIMULATED || 0, 'bg-amber-400']].map(([label, value, color]) => <div key={String(label)}><div className="flex justify-between text-xs mb-1"><span className="font-semibold text-slate-700">{label}</span><span className="font-bold text-slate-900">{Number(value).toLocaleString('en-IN')}</span></div><div className="h-3 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${color} rounded-full`} style={{ width: `${(Number(value) / total) * 100}%` }} /></div></div>)}</div><div className="grid grid-cols-2 gap-3 mt-6"><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100"><div className="text-[10px] uppercase font-bold text-emerald-700">Delivery reliability</div><div className="text-xl font-extrabold text-emerald-900 mt-1">{data.deliveryRate.toFixed(1)}%</div></div><div className="p-3 rounded-xl bg-rose-50 border border-rose-100"><div className="text-[10px] uppercase font-bold text-rose-700">Failure rate</div><div className="text-xl font-extrabold text-rose-900 mt-1">{((data.counts.FAILED || 0) / total * 100).toFixed(1)}%</div></div></div></Panel><Panel title="Dispatch mode" subtitle="Live versus simulated activity.">{Object.entries(data.modes).sort((a, b) => b[1] - a[1]).map(([mode, value]) => <div key={mode} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 mb-2"><div><div className="text-xs font-bold text-slate-800">{mode}</div><div className="text-[10px] text-slate-500">{((value / total) * 100).toFixed(1)}% of log</div></div><div className="text-sm font-extrabold text-slate-900">{value}</div></div>)}</Panel></section>
+    <section className="grid grid-cols-1 xl:grid-cols-2 gap-4"><Panel title="Communication type mix" subtitle="Dispatch volume by business purpose.">{typeRows.map(([type, value]) => <div key={type} className="mb-3"><div className="flex justify-between text-xs mb-1"><span className="font-semibold text-slate-700">{type}</span><span className="font-bold">{value}</span></div><div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{ width: `${(value / Math.max(...typeRows.map(([, v]) => v), 1)) * 100}%` }} /></div></div>)}</Panel><Panel title="Failed communications" subtitle="Latest records requiring attention.">{data.recentFailures.length ? data.recentFailures.map((c) => <div key={c.id} className="p-3 rounded-xl border border-rose-100 bg-rose-50/50 mb-2"><div className="flex justify-between gap-3"><div><div className="text-xs font-bold text-slate-900">{c.parentName} · {c.type}</div><div className="text-[10px] text-slate-500 mt-1">{c.studentName} · {c.recipientPhone}</div></div><AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" /></div></div>) : <div className="p-5 rounded-xl bg-emerald-50 text-xs text-emerald-800">No failed communications in the current demo log.</div>}<Link href="/communications/history?status=FAILED" className="inline-flex mt-2 text-xs font-semibold text-blue-600">View all failures →</Link></Panel></section>
+  </div></AppShell>;
 }
+function Metric({ title, value, sub, icon: Icon, tone = 'blue' }: { title: string; value: string; sub: string; icon: React.ElementType; tone?: 'blue' | 'emerald' | 'rose' | 'amber' }) { const tones = { blue: 'bg-blue-50 text-blue-600', emerald: 'bg-emerald-50 text-emerald-600', rose: 'bg-rose-50 text-rose-600', amber: 'bg-amber-50 text-amber-600' }; return <div className="bg-white rounded-2xl border border-slate-200 p-5"><div className="flex justify-between"><span className="text-xs font-semibold text-slate-500">{title}</span><span className={`w-8 h-8 rounded-lg flex items-center justify-center ${tones[tone]}`}><Icon className="w-4 h-4" /></span></div><div className="text-2xl font-extrabold text-slate-900 mt-2">{value}</div><div className="text-[11px] text-slate-500 mt-1">{sub}</div></div>; }
+function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-[#172033]">{title}</h2><p className="text-xs text-slate-500 mt-0.5 mb-5">{subtitle}</p>{children}</section>; }
