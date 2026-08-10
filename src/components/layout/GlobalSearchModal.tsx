@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, X, User, Users, GraduationCap, Receipt, Sparkles } from 'lucide-react';
 import { store } from '@/lib/store';
+import { Student, Parent, Teacher, FeeInvoice } from '@/types/schema';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -13,20 +14,20 @@ interface GlobalSearchModalProps {
 export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{
-    students: any[];
-    parents: any[];
-    teachers: any[];
-    invoices: any[];
+    students: Student[];
+    parents: Parent[];
+    teachers: Teacher[];
+    invoices: FeeInvoice[];
   }>({ students: [], parents: [], teachers: [], invoices: [] });
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        if (isOpen) onClose();
-        else setQuery('');
+        onClose();
       }
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };

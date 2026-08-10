@@ -25,7 +25,7 @@ export default function OverdueRecoveryQueuePage() {
   const [dispatchedMap, setDispatchedMap] = useState<Record<string, string>>({});
 
   const handleOpenModal = (parentId: string, parentName: string, amount: number, phone: string, studentName: string) => {
-    setSelectedParent({ parentId, name: parentName, amount, phone, studentName } as any);
+    setSelectedParent({ id: parentId, name: parentName, amount, phone, studentName });
   };
 
   const handleConfirmDispatch = async () => {
@@ -33,13 +33,16 @@ export default function OverdueRecoveryQueuePage() {
 
     setDispatching(true);
     try {
+      const parentRecord = store.getParentById(selectedParent.id);
+      const studentId = parentRecord?.childrenIds[0] || 'student-aarav';
       const res = await fetch('/api/communications/fee-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parentId: selectedParent.id,
-          amount: selectedParent.amount,
-          templateType: 'Overdue Fee Notice',
+          studentId: studentId,
+          type: 'Overdue Fee',
+          customTemplate: `Dear ${selectedParent.name}, your total family fee payment of ₹${selectedParent.amount.toLocaleString('en-IN')} for ${selectedParent.studentName} is overdue. Please settle via NIWA link: https://niwa.school.demo/pay`,
         }),
       });
       const data = await res.json();
@@ -51,7 +54,7 @@ export default function OverdueRecoveryQueuePage() {
         schoolId: 'school-1',
         parentId: selectedParent.id,
         parentName: selectedParent.name,
-        studentId: 'student-aarav',
+        studentId: studentId,
         studentName: selectedParent.studentName || 'Aarav Sharma',
         type: 'Overdue Fee',
         recipientPhone: selectedParent.phone,
@@ -72,6 +75,16 @@ export default function OverdueRecoveryQueuePage() {
   };
 
   const stages = ['All', 'Upcoming', 'Reminder Sent', 'First Follow-up', 'Second Follow-up', 'Escalated'] as const;
+
+  const filteredParents = parents.filter((p) => {
+    if (activeStage === 'All') return true;
+    if (activeStage === 'Reminder Sent') return Boolean(dispatchedMap[p.id]);
+    if (activeStage === 'Upcoming') return p.familyTotalOutstanding < 10000 && !dispatchedMap[p.id];
+    if (activeStage === 'First Follow-up') return p.paymentReliabilityScore >= 70 && p.familyTotalOutstanding >= 10000;
+    if (activeStage === 'Second Follow-up') return p.paymentReliabilityScore < 70 && p.familyTotalOutstanding < 18000;
+    if (activeStage === 'Escalated') return p.paymentReliabilityScore < 65 || p.familyTotalOutstanding >= 18000;
+    return true;
+  });
 
   return (
     <AppShell>
@@ -118,12 +131,12 @@ export default function OverdueRecoveryQueuePage() {
         </div>
 
         {/* Stage Filter Buttons */}
-        <div className="flex gap-2 border-b border-slate-200 pb-2">
+        <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
           {stages.map((st) => (
             <button
               key={st}
               onClick={() => setActiveStage(st)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
                 activeStage === st ? 'bg-blue-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -147,43 +160,51 @@ export default function OverdueRecoveryQueuePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {parents.slice(0, 10).map((p) => {
-                  const ref = dispatchedMap[p.id];
-                  const isRaj = p.id === 'parent-raj';
+                {filteredParents.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                      No accounts currently match stage &quot;{activeStage}&quot;.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredParents.slice(0, 15).map((p) => {
+                    const ref = dispatchedMap[p.id];
+                    const isRaj = p.id === 'parent-raj';
 
-                  return (
-                    <tr key={p.id} className={`hover:bg-slate-50 ${isRaj ? 'bg-amber-50/50' : ''}`}>
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-slate-900">{p.name}</div>
-                        {isRaj && <span className="text-[10px] font-bold text-amber-800">Parent of Aarav & Riya</span>}
-                      </td>
-                      <td className="py-3 px-3 text-slate-500">{p.phone}</td>
-                      <td className="py-3 px-3 font-bold text-blue-600">{p.paymentReliabilityScore}/100</td>
-                      <td className="py-3 px-3 font-extrabold text-amber-900 text-sm">₹{p.familyTotalOutstanding.toLocaleString('en-IN')}</td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 bg-red-100 text-red-800 font-bold text-[10px] rounded-full">
-                          {isRaj ? '91 Days Overdue' : 'Overdue'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        {ref ? (
-                          <div className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Dispatched ({ref.slice(0, 14)})</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleOpenModal(p.id, p.name, p.familyTotalOutstanding, p.phone, isRaj ? 'Aarav & Riya Sharma' : 'Student')}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded shadow-xs transition-colors flex items-center gap-1.5"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>Send WhatsApp Reminder</span>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={p.id} className={`hover:bg-slate-50 ${isRaj ? 'bg-amber-50/50' : ''}`}>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900">{p.name}</div>
+                          {isRaj && <span className="text-[10px] font-bold text-amber-800">Parent of Aarav & Riya</span>}
+                        </td>
+                        <td className="py-3 px-3 text-slate-500">{p.phone}</td>
+                        <td className="py-3 px-3 font-bold text-blue-600">{p.paymentReliabilityScore}/100</td>
+                        <td className="py-3 px-3 font-extrabold text-amber-900 text-sm">₹{p.familyTotalOutstanding.toLocaleString('en-IN')}</td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 bg-red-100 text-red-800 font-bold text-[10px] rounded-full">
+                            {isRaj ? '91 Days Overdue' : 'Overdue'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          {ref ? (
+                            <div className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Dispatched ({ref.slice(0, 14)})</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenModal(p.id, p.name, p.familyTotalOutstanding, p.phone, isRaj ? 'Aarav & Riya Sharma' : 'Student')}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded shadow-xs transition-colors flex items-center gap-1.5"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Send WhatsApp Reminder</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

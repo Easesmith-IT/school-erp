@@ -14,16 +14,46 @@ export const DEMO_DATE = '2026-08-09';
 // --- ATTENDANCE AGGREGATIONS ---
 
 export function getSchoolAttendanceSummary(students: Student[]) {
-  if (!students.length) return { avgAttendance: 0, presentToday: 0, below75: 0, below60: 0 };
+  if (!students.length) return { avgAttendance: 0, presentToday: 0, healthy: 0, atRisk: 0, critical: 0, below75: 0, below60: 0 };
   const totalAtt = students.reduce((acc, s) => acc + s.discipline.attendancePercentage, 0);
   const avgAttendance = Number((totalAtt / students.length).toFixed(1));
   
-  // Deterministic present count based on latest attendance percentage
-  const presentToday = students.filter((s) => s.discipline.attendancePercentage >= 75).length;
-  const below75 = students.filter((s) => s.discipline.attendancePercentage < 75).length;
-  const below60 = students.filter((s) => s.discipline.attendancePercentage < 60).length;
+  // Mutually exclusive attendance categories
+  const healthy = students.filter((s) => s.discipline.attendancePercentage >= 75).length;
+  const atRisk = students.filter((s) => s.discipline.attendancePercentage >= 60 && s.discipline.attendancePercentage < 75).length;
+  const critical = students.filter((s) => s.discipline.attendancePercentage < 60).length;
 
-  return { avgAttendance, presentToday, below75, below60 };
+  const below75 = atRisk + critical;
+  const below60 = critical;
+  const presentToday = healthy;
+
+  return { avgAttendance, presentToday, healthy, atRisk, critical, below75, below60 };
+}
+
+export function getSchoolAcademicTrendSummary(students: Student[]) {
+  if (!students.length) {
+    return [
+      { term: 'PA-I', avgScore: 74.2 },
+      { term: 'PA-II', avgScore: 76.4 },
+      { term: 'SA-I', avgScore: 77.5 },
+      { term: 'SA-II', avgScore: 78.1 },
+      { term: 'Current', avgScore: 78.6 },
+    ];
+  }
+
+  const count = students.length;
+  const pa1Sum = students.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0);
+  const pa2Sum = students.reduce((acc, s) => acc + (s.assessmentTrend?.pa2 || s.performanceBreakdown.score), 0);
+  const sa1Sum = students.reduce((acc, s) => acc + (s.assessmentTrend?.sa1 || s.performanceBreakdown.score), 0);
+  const currentSum = students.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0);
+
+  return [
+    { term: 'PA-I', avgScore: Number((pa1Sum / count).toFixed(1)) },
+    { term: 'PA-II', avgScore: Number((pa2Sum / count).toFixed(1)) },
+    { term: 'SA-I', avgScore: Number((sa1Sum / count).toFixed(1)) },
+    { term: 'SA-II', avgScore: Number(((sa1Sum + currentSum) / (2 * count)).toFixed(1)) },
+    { term: 'Current', avgScore: Number((currentSum / count).toFixed(1)) },
+  ];
 }
 
 export function getClassAttendanceSummary(students: Student[]) {

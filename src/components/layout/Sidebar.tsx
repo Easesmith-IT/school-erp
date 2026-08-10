@@ -61,76 +61,82 @@ interface NavSection {
 
 const NAV_CONFIG: NavSection[] = [
   {
-    section: 'OVERVIEW',
+    section: 'EXECUTIVE',
     items: [
-      { label: 'Executive Overview', href: '/dashboard', icon: LayoutDashboard, roles: ['Principal', 'Accountant', 'Teacher', 'Admin'] },
+      { label: 'Executive Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Principal', 'Accountant', 'Teacher', 'Admin'] },
     ],
   },
   {
-    section: 'STUDENT INTELLIGENCE',
+    section: 'STUDENTS',
     items: [
+      { label: 'Students Needing Attention', href: '/students/risk', icon: AlertTriangle, roles: ['Principal', 'Teacher', 'Admin'] },
       {
-        label: 'Students',
+        label: 'Students Directory',
         href: '/students',
         icon: Users,
         roles: ['Principal', 'Teacher', 'Admin', 'Accountant'],
         subItems: [
+          { label: 'Academic Performance', href: '/students/performance', icon: GraduationCap, roles: ['Principal', 'Teacher', 'Admin'] },
+          { label: 'Attendance Intelligence', href: '/students/attendance', icon: CalendarCheck, roles: ['Principal', 'Teacher', 'Admin'] },
+          { label: 'Class Intelligence', href: '/students/class', icon: Layers, roles: ['Principal', 'Teacher', 'Admin'] },
           { label: 'Assessments', href: '/students/assessments', icon: FileSpreadsheet, roles: ['Principal', 'Teacher', 'Admin'] },
           { label: 'Homework & Work', href: '/students/homework', icon: BookOpenCheck, roles: ['Principal', 'Teacher', 'Admin'] },
           { label: 'Activities & Engagement', href: '/students/activities', icon: Trophy, roles: ['Principal', 'Teacher', 'Admin'] },
           { label: 'Performance Trends', href: '/students/trends', icon: TrendingUp, roles: ['Principal', 'Teacher', 'Admin'] },
         ],
       },
-      { label: 'Risk & Intervention', href: '/students/risk', icon: AlertTriangle, roles: ['Principal', 'Teacher', 'Admin'] },
-      { label: 'Academic Intelligence', href: '/students/performance', icon: GraduationCap, roles: ['Principal', 'Teacher', 'Admin'] },
-      { label: 'Attendance', href: '/students/attendance', icon: CalendarCheck, roles: ['Principal', 'Teacher', 'Admin'] },
-      { label: 'Class Performance', href: '/students/class', icon: Layers, roles: ['Principal', 'Teacher', 'Admin'] },
     ],
   },
   {
-    section: 'TEACHER INTELLIGENCE',
-    items: [
-      { label: 'Teacher Intelligence', href: '/teachers', icon: Award, roles: ['Principal', 'Teacher', 'Admin'] },
-      { label: 'Rankings', href: '/teachers/rankings', icon: BarChart3, roles: ['Principal', 'Teacher', 'Admin'] },
-      { label: 'Comparison', href: '/teachers/comparison', icon: GitCompare, roles: ['Principal', 'Admin'] },
-    ],
-  },
-  {
-    section: 'FINANCIAL INTELLIGENCE',
+    section: 'TEACHING',
     items: [
       {
-        label: 'Financial Overview',
-        href: '/finance/dashboard',
-        icon: Wallet,
+        label: 'Teaching Effectiveness',
+        href: '/teachers',
+        icon: Award,
+        roles: ['Principal', 'Teacher', 'Admin'],
+        subItems: [
+          { label: 'Rankings & Benchmarks', href: '/teachers/rankings', icon: BarChart3, roles: ['Principal', 'Teacher', 'Admin'] },
+          { label: 'Teacher Comparison', href: '/teachers/comparison', icon: GitCompare, roles: ['Principal', 'Admin'] },
+        ],
+      },
+    ],
+  },
+  {
+    section: 'FINANCE',
+    items: [
+      {
+        label: 'Fee Recovery',
+        href: '/communications/recovery',
+        icon: Send,
         roles: ['Principal', 'Accountant', 'Admin'],
         subItems: [
+          { label: 'Financial Overview', href: '/finance/dashboard', icon: Wallet, roles: ['Principal', 'Accountant', 'Admin'] },
+          { label: 'Outstanding Portfolio', href: '/finance/outstanding', icon: AlertCircle, roles: ['Principal', 'Accountant'] },
+          { label: 'Parent Reliability', href: '/parents', icon: UserCheck, roles: ['Principal', 'Accountant'] },
+          { label: 'Aging Analysis', href: '/finance/aging', icon: PieChart, roles: ['Principal', 'Accountant'] },
           { label: 'Payment Records', href: '/finance/payments', icon: Receipt, roles: ['Principal', 'Accountant'] },
           { label: 'Collection Analytics', href: '/finance/analytics', icon: LineChart, roles: ['Principal', 'Accountant'] },
           { label: 'Fee Credit Eligibility', href: '/finance/credit', icon: CreditCard, roles: ['Principal', 'Accountant'] },
           { label: 'Payment Trends', href: '/finance/trends', icon: TrendingUp, roles: ['Principal', 'Accountant'] },
         ],
       },
-      { label: 'Collections', href: '/finance/collections', icon: DollarSign, roles: ['Principal', 'Accountant'] },
-      { label: 'Outstanding & Recovery', href: '/finance/outstanding', icon: AlertCircle, roles: ['Principal', 'Accountant'] },
-      { label: 'Parent Reliability', href: '/parents', icon: UserCheck, roles: ['Principal', 'Accountant'] },
-      { label: 'Aging Analysis', href: '/finance/aging', icon: PieChart, roles: ['Principal', 'Accountant'] },
     ],
   },
   {
     section: 'COMMUNICATION',
     items: [
       {
-        label: 'Recovery Workflow',
-        href: '/communications/recovery',
-        icon: Send,
+        label: 'Parent Communication',
+        href: '/communications/history',
+        icon: History,
         roles: ['Principal', 'Accountant', 'Admin'],
         subItems: [
+          { label: 'Fee Reminders', href: '/communications/reminders', icon: MessageSquare, roles: ['Principal', 'Accountant', 'Admin'] },
           { label: 'Reminder Templates', href: '/communications/templates', icon: FileText, roles: ['Principal', 'Accountant', 'Admin'] },
           { label: 'Communication Analytics', href: '/communications/analytics', icon: Activity, roles: ['Principal', 'Accountant', 'Admin'] },
         ],
       },
-      { label: 'Fee Reminders', href: '/communications/reminders', icon: MessageSquare, roles: ['Principal', 'Accountant', 'Admin'] },
-      { label: 'Communication History', href: '/communications/history', icon: History, roles: ['Principal', 'Accountant', 'Admin'] },
     ],
   },
   {

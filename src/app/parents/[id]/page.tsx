@@ -35,7 +35,7 @@ export default function ParentDetailPage() {
           parentId: parent.id,
           studentId: children[0]?.id || 'student-aarav',
           amount: parent.familyTotalOutstanding,
-          templateType: 'Overdue Fee Notice',
+          type: 'Overdue Fee',
         }),
       });
       const data = await res.json();

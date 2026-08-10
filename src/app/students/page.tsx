@@ -55,7 +55,7 @@ export default function StudentsDirectoryPage() {
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.admissionNo.includes(searchTerm) ||
         s.className.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesClass = selectedClass === 'ALL' || s.classId === selectedClass || s.className === `Class ${selectedClass}`;
+      const matchesClass = selectedClass === 'ALL' || s.className === selectedClass || s.classId === selectedClass || s.className.includes(selectedClass);
       const matchesRisk = selectedRisk === 'ALL' || s.riskLevel === selectedRisk;
       return matchesSearch && matchesClass && matchesRisk;
     });

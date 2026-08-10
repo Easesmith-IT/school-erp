@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Download, X, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { store } from '@/lib/store';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -15,6 +16,30 @@ export function ExportModal({ isOpen, onClose, title = 'Analytical Dataset' }: E
   if (!isOpen) return null;
 
   const handleDownload = () => {
+    const students = store.getStudents();
+    const headers = ['Admission No', 'Name', 'Class', 'Performance Score', 'Risk Level', 'Attendance %', 'Homework %', 'Outstanding Fee'];
+    const rows = students.map((s) => [
+      s.admissionNo,
+      `"${s.name}"`,
+      `"${s.className}"`,
+      s.performanceBreakdown.score,
+      s.riskLevel,
+      s.discipline.attendancePercentage,
+      s.discipline.homeworkCompletionPercentage,
+      s.studentOutstandingFee,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `school_intelligence_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     setDownloaded(true);
     setTimeout(() => {
       setDownloaded(false);

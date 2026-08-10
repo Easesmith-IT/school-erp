@@ -34,6 +34,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import {
   getSchoolAttendanceSummary,
   getClassPerformanceSummary,
+  getSchoolAcademicTrendSummary,
+  getCollectionVelocity,
 } from '@/lib/aggregations';
 import {
   getSchoolHealthOverview,
@@ -55,12 +57,26 @@ import {
   Bar,
 } from 'recharts';
 
+import { IntelligenceDrawer } from '@/components/intelligence/IntelligenceDrawer';
+import { Student } from '@/types/schema';
+
 export default function PrincipalDashboardPage() {
   const { user } = useAuth();
   const [isClient, setIsClient] = useState(false);
   const [sendingState, setSendingState] = useState<Record<string, boolean>>({});
   const [sendingSuccess, setSendingSuccess] = useState<Record<string, string>>({});
   const [commLogs, setCommLogs] = useState(() => store.getCommunications());
+
+  // Intelligence Drawer State
+  const [selectedDrawerStudent, setSelectedDrawerStudent] = useState<Student | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [completedActions, setCompletedActions] = useState<Record<string, boolean>>({});
+
+  const handleOpenStudentDrawer = (studentId: string = 'student-riya') => {
+    const s = store.getStudentById(studentId) || store.getStudentById('student-riya') || null;
+    setSelectedDrawerStudent(s);
+    setIsDrawerOpen(true);
+  };
 
   useEffect(() => {
     setIsClient(true);
@@ -132,20 +148,30 @@ export default function PrincipalDashboardPage() {
     return { high, med, low };
   }, [parents]);
 
-  const academicTrendData = useMemo(() => [
-    { term: 'PA-I', avgScore: 74.2 },
-    { term: 'PA-II', avgScore: 76.4 },
-    { term: 'SA-I', avgScore: 77.5 },
-    { term: 'SA-II', avgScore: 78.1 },
-    { term: 'Current', avgScore: metrics.avgPerformance },
-  ], [metrics.avgPerformance]);
+  const academicTrendData = useMemo(
+    () => getSchoolAcademicTrendSummary(students),
+    [students]
+  );
 
-  const financialCollectionData = useMemo(() => [
-    { month: 'Apr', expected: 45.0, collected: 42.5, rate: 94.4 },
-    { month: 'May', expected: 45.0, collected: 41.0, rate: 91.1 },
-    { month: 'Jun', expected: 45.0, collected: 39.5, rate: 87.7 },
-    { month: 'Jul', expected: 48.3, collected: 19.0, rate: 39.3 },
-  ], []);
+  const collectionVelocity = useMemo(
+    () => getCollectionVelocity(payments, feeInvoices),
+    [payments, feeInvoices]
+  );
+
+  const financialCollectionData = useMemo(() => {
+    if (collectionVelocity.monthlyBreakdown.length > 0) {
+      return collectionVelocity.monthlyBreakdown.map((m) => ({
+        month: m.month,
+        collected: Number((m.collected / 100000).toFixed(1)),
+      }));
+    }
+    return [
+      { month: 'Apr', collected: 42.5 },
+      { month: 'May', collected: 41.0 },
+      { month: 'Jun', collected: 39.5 },
+      { month: 'Jul', collected: 19.0 },
+    ];
+  }, [collectionVelocity]);
 
   // NIWA Handler
   const handleSendReminder = async (parentId: string, studentId: string, e: React.MouseEvent) => {
@@ -210,186 +236,246 @@ export default function PrincipalDashboardPage() {
         </div>
 
         {/* ========================================================================= */}
-        {/* 1. SCHOOL HEALTH OVERVIEW */}
+        {/* 1. SCHOOL PULSE (COMPACT HORIZONTAL EXECUTIVE SUMMARY) */}
         {/* ========================================================================= */}
-        <div className="bg-white p-5 md:p-6 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <Activity className="w-4 h-4 text-indigo-600" />
-                <span>School Health Overview</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Executive health metrics calculated across academic, attendance, financial, and faculty pillars
-              </p>
-            </div>
-            <span className="px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg">
-              Live School Health Score: 82.3 / 100
-            </span>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs font-extrabold text-slate-900 tracking-tight uppercase">School Pulse</span>
+            <span className="text-[11px] text-slate-400">| Synchronized</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Academic */}
-            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200">
-              <div className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Academic</div>
-              <div className="text-2xl font-black text-blue-950 mt-1">78.6%</div>
-              <div className="text-[11px] text-blue-800 font-semibold mt-1">Current term score average</div>
+          <div className="flex items-center gap-6 text-xs flex-wrap">
+            <div>
+              <span className="text-slate-400 font-medium block text-[10px]">Students</span>
+              <strong className="text-slate-900 text-sm font-black">{metrics.totalStudents.toLocaleString('en-IN')}</strong>
             </div>
 
-            {/* Attendance */}
-            <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-200">
-              <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Attendance</div>
-              <div className="text-2xl font-black text-purple-950 mt-1">91.8%</div>
-              <div className="text-[11px] text-purple-800 font-semibold mt-1">School-wide attendance rate</div>
+            <div className="border-l border-slate-200 pl-6">
+              <span className="text-rose-600 font-bold block text-[10px]">Need Attention</span>
+              <strong className="text-rose-950 text-sm font-black">{metrics.studentsAtRiskCount} Scholars</strong>
             </div>
 
-            {/* Financial */}
-            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200">
-              <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Financial</div>
-              <div className="text-2xl font-black text-emerald-950 mt-1">77.0%</div>
-              <div className="text-[11px] text-emerald-800 font-semibold mt-1">Reconciled collection rate</div>
+            <div className="border-l border-slate-200 pl-6">
+              <span className="text-slate-400 font-medium block text-[10px]">Attendance Rate</span>
+              <strong className="text-slate-900 text-sm font-black">{metrics.avgAttendance}%</strong>
             </div>
 
-            {/* Student Risk */}
-            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200">
-              <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Student Risk</div>
-              <div className="text-lg font-black text-amber-950 mt-1">{healthOverview.riskStatus}</div>
-              <div className="text-[11px] text-amber-900 font-semibold mt-1">{metrics.studentsAtRiskCount} students flagged</div>
+            <div className="border-l border-slate-200 pl-6">
+              <span className="text-slate-400 font-medium block text-[10px]">Academic Performance</span>
+              <strong className="text-slate-900 text-sm font-black">{metrics.avgPerformance}%</strong>
             </div>
 
-            {/* Teacher Performance */}
-            <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800">
-              <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Teacher Index</div>
-              <div className="text-2xl font-black text-white mt-1">84.2</div>
-              <div className="text-[11px] text-emerald-400 font-semibold mt-1">Priya Sharma Rank #1 (91.4)</div>
+            <div className="border-l border-slate-200 pl-6">
+              <span className="text-slate-400 font-medium block text-[10px]">Fee Collection Rate</span>
+              <strong className="text-emerald-700 text-sm font-black">{metrics.collectionRate}%</strong>
             </div>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* PRINCIPAL MORNING BRIEF & EXECUTIVE PRIORITIES */}
+        {/* 2. TODAY AT A GLANCE (EXECUTIVE NARRATIVE) */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Principal Morning Brief (2/3 width) */}
-          <div className="bg-slate-900 text-white p-5 md:p-6 rounded-xl border border-slate-800 shadow-md lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h2 className="text-base font-bold text-white tracking-tight">
-                    Principal Morning Brief
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Automated morning briefing compiled from canonical data changes
-                  </p>
-                </div>
+        <div className="bg-slate-900 text-white p-5 md:p-6 rounded-xl border border-slate-800 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <h2 className="text-base font-bold text-white tracking-tight">Today at a Glance</h2>
+                <p className="text-xs text-slate-400">Executive Briefing & High-Priority Management Context</p>
               </div>
-              <span className="px-2.5 py-1 bg-slate-800 text-amber-400 text-xs font-bold rounded-lg border border-slate-700">
-                Morning Executive Summary
-              </span>
+            </div>
+            <span className="px-2.5 py-1 bg-slate-800 text-amber-400 text-xs font-bold rounded-lg border border-slate-700">
+              Management Briefing
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center text-xs">
+            <div className="lg:col-span-2 space-y-2">
+              <p className="text-slate-200 text-sm leading-relaxed">
+                School performance is broadly stable with <strong>{metrics.collectionRate}%</strong> fee collection and <strong>{metrics.avgAttendance}%</strong> attendance. However, <strong>{metrics.studentsAtRiskCount} students</strong> require active management intervention.
+              </p>
+              <div className="p-3 bg-slate-800/90 rounded-lg border border-slate-700 text-slate-300 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">Highest-Priority Intervention Case</span>
+                  <span className="font-bold text-white text-sm">Riya Sharma (Class 8-A)</span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Attendance 68% (critical) • Homework 54% • Performance 72.0 • Family Outstanding ₹18,500 (Raj Sharma)
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleOpenStudentDrawer('student-riya')}
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg text-xs shrink-0 transition-colors shadow-xs"
+                >
+                  Review Case →
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              {/* GOOD NEWS */}
-              <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-2">
-                <div className="font-bold text-emerald-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Good News</span>
-                </div>
-                <div className="space-y-2">
-                  {morningBrief.goodNews.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={item.route}
-                      className="block p-2 rounded bg-slate-900/60 hover:bg-slate-900 border border-slate-700/50 text-slate-300 hover:text-white transition-colors"
-                    >
-                      {item.text}
-                    </Link>
-                  ))}
-                </div>
+            {/* What Would You Do Interactive Decision Card */}
+            <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700 space-y-2.5">
+              <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-blue-400" />
+                <span>Management Action Needed</span>
               </div>
-
-              {/* ATTENTION */}
-              <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-2">
-                <div className="font-bold text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Attention Required</span>
-                </div>
-                <div className="space-y-2">
-                  {morningBrief.attention.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={item.route}
-                      className="block p-2 rounded bg-slate-900/60 hover:bg-slate-900 border border-slate-700/50 text-slate-300 hover:text-white transition-colors"
-                    >
-                      {item.text}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* TODAY'S ACTIONS */}
-              <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-2">
-                <div className="font-bold text-blue-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Today&apos;s Actions</span>
-                </div>
-                <div className="space-y-2">
-                  {morningBrief.todayActions.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={item.route}
-                      className="block p-2 rounded bg-blue-950/50 hover:bg-blue-900/60 border border-blue-800/60 text-blue-200 transition-colors group"
-                    >
-                      <div className="font-bold text-white group-hover:text-blue-300">{item.title}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{item.description}</div>
-                    </Link>
-                  ))}
-                </div>
+              <p className="text-xs text-white font-semibold">
+                What should happen next for Riya Sharma?
+              </p>
+              <div className="space-y-1.5">
+                <button
+                  onClick={() => handleOpenStudentDrawer('student-riya')}
+                  className="w-full text-left px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs transition-colors flex items-center justify-between"
+                >
+                  <span>1. Contact Parent (Raj Sharma)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <Link
+                  href="/teachers/teacher-1"
+                  className="block px-3 py-2 bg-slate-900 hover:bg-slate-950 text-slate-300 rounded-lg font-semibold text-xs transition-colors"
+                >
+                  2. Review Educator (Priya Sharma)
+                </Link>
+                <Link
+                  href="/students/class"
+                  className="block px-3 py-2 bg-slate-900 hover:bg-slate-950 text-slate-300 rounded-lg font-semibold text-xs transition-colors"
+                >
+                  3. Inspect Class 8-A Cohort
+                </Link>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Today's Management Priorities Queue (1/3 width) */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-rose-600" />
-                  <span>Today&apos;s Priorities</span>
-                </h3>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Sorted by Severity</span>
-              </div>
+        {/* ========================================================================= */}
+        {/* 3. THREE THINGS NEED YOUR ATTENTION (EXECUTIVE PRIORITY BLOCKS) */}
+        {/* ========================================================================= */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+              <span>3 Things Need Your Attention</span>
+            </h2>
+            <span className="text-xs text-slate-500">Executive Priority Queue</span>
+          </div>
 
-              <div className="space-y-2.5">
-                {priorityQueue.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${item.badgeColor}`}>
-                          {item.severity}
-                        </span>
-                        <span className="font-bold text-xs text-slate-900 truncate max-w-[170px]">{item.title}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-1">{item.subtitle}</div>
-                    </div>
-                    <Link
-                      href={item.actionRoute}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold shrink-0 transition-colors"
-                    >
-                      {item.actionLabel}
-                    </Link>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* PRIORITY 1 — STUDENT ATTENTION */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Priority 1 • Student Attention</span>
+                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-full border border-rose-200">
+                    HIGH RISK
+                  </span>
+                </div>
+
+                <div>
+                  <div className="text-lg font-black text-slate-900">Riya Sharma</div>
+                  <div className="text-xs text-slate-500">Class 8-A • Admission #1088</div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-medium">Perf Score</div>
+                    <div className="text-sm font-black text-slate-900">72.0</div>
                   </div>
-                ))}
+                  <div>
+                    <div className="text-[10px] text-rose-700 font-bold">Attendance</div>
+                    <div className="text-sm font-black text-rose-950">68%</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-rose-700 font-bold">Homework</div>
+                    <div className="text-sm font-black text-rose-950">54%</div>
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-600">
+                  <strong>Why Flagged:</strong> Severe attendance gap combined with 54% homework completion.
+                </div>
               </div>
+
+              {completedActions['student-riya'] ? (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 font-bold text-xs flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>✓ Action Completed (Parent Contacted)</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleOpenStudentDrawer('student-riya')}
+                  className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>REVIEW CASE</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 text-right">
-              <Link href="/students/risk" className="text-xs font-semibold text-blue-600 hover:underline">
-                Full Executive Queue →
+            {/* PRIORITY 2 — FEE RECOVERY */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Priority 2 • Fee Recovery</span>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full border border-amber-200">
+                    AGING EXPOSURE
+                  </span>
+                </div>
+
+                <div>
+                  <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">90+ Day Exposure</div>
+                  <div className="text-2xl font-black text-red-600 mt-0.5">₹{formatLakhs(metrics.agingBuckets.days90Plus)} L</div>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-950 font-medium">
+                  High recovery risk exposure across past-due family balances including Raj Sharma (₹18,500).
+                </div>
+              </div>
+
+              <Link
+                href="/communications/recovery"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 text-center"
+              >
+                <span>REVIEW RECOVERY WORKFLOW</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {/* PRIORITY 3 — TEACHING EFFECTIVENESS */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">Priority 3 • Teaching Effectiveness</span>
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-900 text-[10px] font-bold rounded-full border border-purple-200">
+                    #1 EDUCATOR
+                  </span>
+                </div>
+
+                <div>
+                  <div className="text-lg font-black text-slate-900">Priya Sharma</div>
+                  <div className="text-xs text-slate-500">Mathematics • Class 8-A & 8-B</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-center bg-purple-50 p-2.5 rounded-lg border border-purple-100">
+                  <div>
+                    <div className="text-[10px] text-purple-700 font-medium">Teacher Index</div>
+                    <div className="text-sm font-black text-purple-950">91.4</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-700 font-medium">Cohort Growth</div>
+                    <div className="text-sm font-black text-emerald-700">+11.4%</div>
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-600">
+                  Top performing mathematics educator leading cohort progress across Class 8 sections.
+                </div>
+              </div>
+
+              <Link
+                href="/teachers/teacher-1"
+                className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white font-extrabold text-xs rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 text-center"
+              >
+                <span>VIEW EDUCATOR PERFORMANCE</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -674,16 +760,16 @@ export default function PrincipalDashboardPage() {
               <div className="space-y-3">
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="font-semibold text-slate-700">Healthy</span>
+                    <span className="font-semibold text-slate-700">Healthy (&ge;75%)</span>
                     <span className="font-bold text-slate-900">
-                      {metrics.totalStudents - attendanceSummary.below75} Students
+                      {attendanceSummary.healthy} Students
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                     <div
                       className="bg-emerald-500 h-full rounded-full"
                       style={{
-                        width: `${(((metrics.totalStudents - attendanceSummary.below75) / metrics.totalStudents) * 100).toFixed(0)}%`,
+                        width: `${((attendanceSummary.healthy / (metrics.totalStudents || 1)) * 100).toFixed(0)}%`,
                       }}
                     ></div>
                   </div>
@@ -691,14 +777,14 @@ export default function PrincipalDashboardPage() {
 
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="font-semibold text-amber-700">At Risk</span>
-                    <span className="font-bold text-amber-900">{attendanceSummary.below75 - attendanceSummary.below60} Students</span>
+                    <span className="font-semibold text-amber-700">At Risk (60-74.9%)</span>
+                    <span className="font-bold text-amber-900">{attendanceSummary.atRisk} Students</span>
                   </div>
                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                     <div
                       className="bg-amber-500 h-full rounded-full"
                       style={{
-                        width: `${(((attendanceSummary.below75 - attendanceSummary.below60) / metrics.totalStudents) * 100).toFixed(0)}%`,
+                        width: `${((attendanceSummary.atRisk / (metrics.totalStudents || 1)) * 100).toFixed(0)}%`,
                       }}
                     ></div>
                   </div>
@@ -706,14 +792,14 @@ export default function PrincipalDashboardPage() {
 
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="font-semibold text-rose-700">Critical</span>
-                    <span className="font-bold text-rose-900">{attendanceSummary.below75} Students</span>
+                    <span className="font-semibold text-rose-700">Critical (&lt;60%)</span>
+                    <span className="font-bold text-rose-900">{attendanceSummary.critical} Students</span>
                   </div>
                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                     <div
                       className="bg-rose-500 h-full rounded-full"
                       style={{
-                        width: `${((attendanceSummary.below75 / metrics.totalStudents) * 100).toFixed(0)}%`,
+                        width: `${((attendanceSummary.critical / (metrics.totalStudents || 1)) * 100).toFixed(0)}%`,
                       }}
                     ></div>
                   </div>
@@ -1249,6 +1335,16 @@ export default function PrincipalDashboardPage() {
           </div>
         </div>
       </div>
+
+      <IntelligenceDrawer
+        student={selectedDrawerStudent}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onActionCompleted={(studentId) => {
+          setCompletedActions((prev) => ({ ...prev, [studentId]: true }));
+        }}
+        isCompleted={selectedDrawerStudent ? Boolean(completedActions[selectedDrawerStudent.id]) : false}
+      />
     </AppShell>
   );
 }
