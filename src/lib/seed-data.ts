@@ -56,11 +56,11 @@ export function generateSeedData(): SeedDataStore {
   const prng = new SeededRandom(428912);
 
   const classList = [
-    '8-A', '8-B', '5-A', '5-B', '6-A', '6-B', '7-A', '7-B',
-    '9-A', '9-B', '10-A', '10-B', '11-A', '11-B', '12-A', '12-B',
+    'Class 8-A', 'Class 8-B', 'Class 5-A', 'Class 5-B', 'Class 6-A', 'Class 6-B', 'Class 7-A', 'Class 7-B',
+    'Class 9-A', 'Class 9-B', 'Class 10-A', 'Class 10-B', 'Class 11-A', 'Class 11-B', 'Class 12-A', 'Class 12-B',
   ];
 
-  // 1. Create 20 Teachers (Priya Sharma assigned to Class 8-A, 8-B)
+  // 1. Create 20 Teachers (Priya Sharma assigned to Class 8-A, Class 8-B)
   const teacherNames = [
     { name: 'Priya Sharma', subject: 'Mathematics' }, // Demo hero teacher
     { name: 'Amit Kumar', subject: 'Science' },
@@ -84,10 +84,15 @@ export function generateSeedData(): SeedDataStore {
     { name: 'Gaurav Jain', subject: 'Sanskrit' },
   ];
 
+  const nonPriyaClasses = classList.filter((c) => c !== 'Class 8-A' && c !== 'Class 8-B');
+
   const teachers: Teacher[] = teacherNames.map((t, idx) => {
     const id = `teacher-${idx + 1}`;
-    const assignedClasses = idx === 0 ? ['8-A', '8-B'] : [classList[idx % classList.length]];
-    if (idx !== 0 && idx % 2 === 0) assignedClasses.push(classList[(idx + 1) % classList.length]);
+    const assignedClasses = idx === 0 ? ['Class 8-A', 'Class 8-B'] : [nonPriyaClasses[(idx - 1) % nonPriyaClasses.length]];
+    if (idx !== 0 && idx % 2 === 0) {
+      const secondClass = nonPriyaClasses[idx % nonPriyaClasses.length];
+      if (!assignedClasses.includes(secondClass)) assignedClasses.push(secondClass);
+    }
 
     return {
       id,
@@ -110,17 +115,22 @@ export function generateSeedData(): SeedDataStore {
     };
   });
 
-  // 2. Create Hero Parents & Seed Parent List
+  // 2. Create 850 Parents (Including Hero Parent Raj Sharma)
   const parents: Parent[] = [];
 
   // Hero Parent: Raj Sharma (father of Aarav & Riya)
   const parentRajHistory = [
-    { month: 'Apr 2026', daysToPay: 18, amount: 15000, status: 'On-Time' as const },
-    { month: 'Jan 2026', daysToPay: 22, amount: 15000, status: 'On-Time' as const },
-    { month: 'Oct 2025', daysToPay: 25, amount: 15000, status: 'On-Time' as const },
-    { month: 'Jul 2025', daysToPay: 20, amount: 15000, status: 'On-Time' as const },
-    { month: 'Apr 2025', daysToPay: 19, amount: 15000, status: 'On-Time' as const },
-    { month: 'Jan 2025', daysToPay: 45, amount: 15000, status: 'Delayed' as const },
+    { month: 'Jul 2026', daysToPay: 28, amount: 15000, status: 'On-Time' as const },
+    { month: 'Apr 2026', daysToPay: 35, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jan 2026', daysToPay: 42, amount: 15000, status: 'Delayed' as const },
+    { month: 'Oct 2025', daysToPay: 31, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jul 2025', daysToPay: 29, amount: 15000, status: 'On-Time' as const },
+    { month: 'Apr 2025', daysToPay: 64, amount: 15000, status: 'Delayed' as const },
+    { month: 'Jan 2025', daysToPay: 30, amount: 15000, status: 'On-Time' as const },
+    { month: 'Oct 2024', daysToPay: 32, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jul 2024', daysToPay: 40, amount: 15000, status: 'On-Time' as const },
+    { month: 'Apr 2024', daysToPay: 38, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jan 2024', daysToPay: 49, amount: 15000, status: 'On-Time' as const },
   ];
   const rajRel = calculatePaymentReliability(parentRajHistory, 18500);
   const rajCredit = calculateFeeCreditEligibility(rajRel.score, 18500, rajRel.onTimeRate);
@@ -139,8 +149,8 @@ export function generateSeedData(): SeedDataStore {
   };
   parents.push(parentRaj);
 
-  // Create remaining 623 Parents to cover 1,248 students
-  for (let i = 2; i <= 624; i++) {
+  // Generate 849 remaining parents to reach total population of 850 parents
+  for (let i = 2; i <= 850; i++) {
     const pGender = prng.next() > 0.5 ? 'male' : 'female';
     const fName = prng.pick(pGender === 'male' ? FIRST_NAMES_BOYS : FIRST_NAMES_GIRLS);
     const lName = prng.pick(LAST_NAMES);
@@ -148,16 +158,16 @@ export function generateSeedData(): SeedDataStore {
     const pId = `parent-${i}`;
     const phone = `+91 ${prng.nextInt(70000, 99999)} ${prng.nextInt(10000, 99999)}`;
 
-    const onTimeRate = prng.nextInt(55, 98);
-    const avgDays = Math.round(15 + (100 - onTimeRate) * 0.5);
+    const onTimeRate = prng.nextInt(60, 98);
+    const avgDays = Math.round(15 + (100 - onTimeRate) * 0.4);
 
-    const relBreakdown = calculatePaymentReliability(
-      [
-        { month: 'Apr 2026', daysToPay: avgDays, amount: 12000, status: onTimeRate > 75 ? 'On-Time' : 'Delayed' },
-        { month: 'Jan 2026', daysToPay: avgDays + 5, amount: 12000, status: onTimeRate > 80 ? 'On-Time' : 'Delayed' },
-      ],
-      0
-    );
+    const history = [
+      { month: 'Apr 2026', daysToPay: avgDays, amount: 12000, status: onTimeRate > 75 ? ('On-Time' as const) : ('Delayed' as const) },
+      { month: 'Jan 2026', daysToPay: avgDays + 4, amount: 12000, status: onTimeRate > 80 ? ('On-Time' as const) : ('Delayed' as const) },
+      { month: 'Oct 2025', daysToPay: avgDays - 2, amount: 12000, status: 'On-Time' as const },
+    ];
+
+    const relBreakdown = calculatePaymentReliability(history, 0);
 
     parents.push({
       id: pId,
@@ -169,7 +179,7 @@ export function generateSeedData(): SeedDataStore {
       paymentReliabilityScore: relBreakdown.score,
       paymentReliabilityBreakdown: relBreakdown,
       feeCreditEligibility: calculateFeeCreditEligibility(relBreakdown.score, 0, relBreakdown.onTimeRate),
-      familyPaymentHistory: [],
+      familyPaymentHistory: history,
     });
   }
 
@@ -177,17 +187,18 @@ export function generateSeedData(): SeedDataStore {
   const students: Student[] = [];
 
   // Hero Student 1: Aarav Sharma (Class 8-A, High Performer)
-  const aaravAcademics: AcademicScores = { english: 82, hindi: 80, mathematics: 96, science: 90, socialStudies: 82, gk: 86 };
+  const aaravAcademics: AcademicScores = { english: 82, hindi: 80, mathematics: 96, science: 89, socialStudies: 79, gk: 80 };
   const aaravDiscipline: AcademicDiscipline = { attendancePercentage: 94.2, bookCompletionPercentage: 92, homeworkCompletionPercentage: 91.0 };
   const aaravEngagement: StudentEngagement = { activityParticipation: 88, competitionParticipation: 90 };
   const aaravParentEng: ParentEngagement = { ptmParticipation: 95, parentFeedbackScore: 90 };
   const aaravPerf = calculateStudentPerformance(aaravAcademics, aaravDiscipline, aaravEngagement, aaravParentEng);
+
   const studentAarav: Student = {
     id: 'student-aarav',
-    admissionNo: '1042',
+    admissionNo: '1024',
     name: 'Aarav Sharma',
     classId: 'class-8a',
-    className: '8-A',
+    className: 'Class 8-A',
     gender: 'Male',
     parentId: 'parent-raj',
     teacherId: 'teacher-1', // Priya Sharma
@@ -223,7 +234,7 @@ export function generateSeedData(): SeedDataStore {
   students.push(studentAarav);
 
   // Hero Student 2: Riya Sharma (Class 8-A, High Risk Case)
-  const riyaAcademics: AcademicScores = { english: 78, hindi: 76, mathematics: 74, science: 74, socialStudies: 78, gk: 80 };
+  const riyaAcademics: AcademicScores = { english: 80, hindi: 78, mathematics: 68, science: 71, socialStudies: 80, gk: 96 };
   const riyaDiscipline: AcademicDiscipline = { attendancePercentage: 68.0, bookCompletionPercentage: 60, homeworkCompletionPercentage: 54.0 };
   const riyaEngagement: StudentEngagement = { activityParticipation: 65, competitionParticipation: 60 };
   const riyaParentEng: ParentEngagement = { ptmParticipation: 70, parentFeedbackScore: 75 };
@@ -235,7 +246,7 @@ export function generateSeedData(): SeedDataStore {
     admissionNo: '1088',
     name: 'Riya Sharma',
     classId: 'class-8a',
-    className: '8-A',
+    className: 'Class 8-A',
     gender: 'Female',
     parentId: 'parent-raj',
     teacherId: 'teacher-1', // Priya Sharma
@@ -268,7 +279,7 @@ export function generateSeedData(): SeedDataStore {
   };
   students.push(studentRiya);
 
-  // Generate remaining 1,246 students across classes
+  // Generate remaining 1,246 students across classes and map to parents 2..850
   let remainingOutstandingTarget = 4230000 - (8500 + 10000); // Target ₹42.3L total outstanding
 
   for (let i = 3; i <= 1248; i++) {
@@ -279,23 +290,24 @@ export function generateSeedData(): SeedDataStore {
 
     const classIdx = (i - 1) % classList.length;
     const className = classList[classIdx];
-    const classId = `class-${className.toLowerCase().replace('-', '')}`;
+    const classId = `class-${className.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     const teacherId = `teacher-${(classIdx % 20) + 1}`;
 
-    const parentIdx = Math.floor((i - 1) / 2);
-    const parent = parents[parentIdx] || parents[parents.length - 1];
+    // Map 1246 students across parents 2 to 850
+    const parentIdx = 1 + ((i - 3) % 849);
+    const parent = parents[parentIdx];
     parent.childrenIds.push(`student-${i}`);
 
-    const isPriyaCohort = className === '8-A' || className === '8-B';
+    const isPriyaCohort = className === 'Class 8-A' || className === 'Class 8-B';
 
     let att: number;
     let hw: number;
     let basePerf: number;
 
     if (isPriyaCohort) {
-      att = prng.nextInt(90, 99);
-      hw = prng.nextInt(88, 98);
-      basePerf = prng.nextInt(85, 98);
+      att = prng.nextInt(94, 99);
+      hw = prng.nextInt(92, 98);
+      basePerf = prng.nextInt(90, 97);
     } else {
       const roll = prng.next();
       if (roll < 0.07) {
@@ -307,29 +319,29 @@ export function generateSeedData(): SeedDataStore {
         hw = prng.nextInt(60, 74);
         basePerf = prng.nextInt(63, 73);
       } else {
-        att = prng.nextInt(84, 98);
-        hw = prng.nextInt(80, 96);
-        basePerf = prng.nextInt(75, 94);
+        att = prng.nextInt(80, 90);
+        hw = prng.nextInt(76, 86);
+        basePerf = prng.nextInt(65, 78);
       }
     }
 
-    const mathScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
-    const sciScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
-    const engScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
-    const hinScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
-    const ssScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
-    const gkScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 6)));
+    const mathScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
+    const sciScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
+    const engScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4)));
+    const hinScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4)));
+    const ssScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
+    const gkScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 5)));
 
     const academics: AcademicScores = { english: engScore, hindi: hinScore, mathematics: mathScore, science: sciScore, socialStudies: ssScore, gk: gkScore };
-    const discipline: AcademicDiscipline = { attendancePercentage: att, bookCompletionPercentage: Math.min(100, hw + prng.nextInt(-3, 5)), homeworkCompletionPercentage: hw };
+    const discipline: AcademicDiscipline = { attendancePercentage: att, bookCompletionPercentage: Math.min(100, hw + prng.nextInt(-2, 4)), homeworkCompletionPercentage: hw };
     const engagement: StudentEngagement = { activityParticipation: prng.nextInt(65, 95), competitionParticipation: prng.nextInt(60, 92) };
     const parentEng: ParentEngagement = { ptmParticipation: prng.nextInt(70, 98), parentFeedbackScore: prng.nextInt(70, 95) };
 
     const perfBreakdown = calculateStudentPerformance(academics, discipline, engagement, parentEng);
 
-    let pa1 = isPriyaCohort ? Math.max(50, perfBreakdown.score - prng.nextInt(5, 9)) : perfBreakdown.score + prng.nextInt(-5, 5);
-    let pa2 = pa1 + prng.nextInt(-2, 3);
-    let sa1 = pa2 + prng.nextInt(-2, 3);
+    let pa1 = isPriyaCohort ? Math.max(50, perfBreakdown.score - 5.2) : perfBreakdown.score + 0.0;
+    let pa2 = pa1 + 1.5;
+    let sa1 = pa2 + 1.5;
     let current = perfBreakdown.score;
 
     pa1 = Number(Math.min(100, Math.max(40, pa1)).toFixed(1));
@@ -386,7 +398,7 @@ export function generateSeedData(): SeedDataStore {
     if (parent3) parent3.familyTotalOutstanding += remainingOutstandingTarget;
   }
 
-  // 4. Update Parent Reliability for ALL parents dynamically
+  // 4. Update Parent Reliability for ALL 850 parents dynamically
   parents.forEach((parent) => {
     const relBreakdown = calculatePaymentReliability(parent.familyPaymentHistory, parent.familyTotalOutstanding);
     const creditEligibility = calculateFeeCreditEligibility(relBreakdown.score, parent.familyTotalOutstanding, relBreakdown.onTimeRate);
@@ -399,7 +411,7 @@ export function generateSeedData(): SeedDataStore {
   teachers.forEach((teacher) => {
     const assigned = students.filter((s) => teacher.assignedClasses.includes(s.className) || teacher.assignedClasses.includes(s.classId));
     teacher.studentCount = assigned.length;
-    
+
     // Dynamic calculation from assigned cohort (NO hardcoding for any teacher)
     const breakdown = calculateTeacherPerformance(assigned);
     teacher.performanceBreakdown = breakdown;
@@ -411,14 +423,14 @@ export function generateSeedData(): SeedDataStore {
   // Sort teachers dynamically by calculated performance breakdown score
   teachers.sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
 
-  // 6. Generate Canonical FeeInvoices & PaymentRecords
+  // 6. Generate 24-Month Rich Financial Invoices & Payment Records
   const feeInvoices: FeeInvoice[] = [];
   const payments: PaymentRecord[] = [];
 
   let invIdCounter = 10001;
   let payIdCounter = 20001;
 
-  // Targets anchored to DEMO_DATE (2026-08-09):
+  // Outstanding Buckets Anchored to DEMO_DATE (2026-08-09):
   // Collected: ₹1.42 Cr (₹14,200,000)
   // Current / Not Due: ₹12.5 L (₹1,250,000)
   // 0-30 Days Overdue: ₹8.0 L (₹800,000)
@@ -443,7 +455,7 @@ export function generateSeedData(): SeedDataStore {
     { bucketName: '90+', targetAmount: 600000 - 10000, dueDate: '2026-04-10' },
   ];
 
-  // First, create Hero Student outstanding invoices explicitly
+  // Hero Student 1 Outstanding Invoice (Aarav - ₹8,500)
   const aaravParent = parents.find((p) => p.id === studentAarav.parentId)!;
   const invAaravId = `inv-${invIdCounter++}`;
   feeInvoices.push({
@@ -480,6 +492,7 @@ export function generateSeedData(): SeedDataStore {
     status: 'Success',
   });
 
+  // Hero Student 2 Outstanding Invoice (Riya - ₹10,000)
   const invRiyaId = `inv-${invIdCounter++}`;
   feeInvoices.push({
     id: invRiyaId,
@@ -515,7 +528,7 @@ export function generateSeedData(): SeedDataStore {
     status: 'Success',
   });
 
-  // Distribute remaining bucket target amounts
+  // Distribute remaining bucket target amounts across students
   let studentCursor = 2;
 
   specs.forEach((spec) => {
@@ -571,50 +584,62 @@ export function generateSeedData(): SeedDataStore {
     }
   });
 
-  // Now create historical fully paid invoices to reach target collected fees of ₹14,200,000 (₹1.42 Cr)
+  // Generate 24-Month Historical Paid Invoices and Payments across students
   const currentPaymentsSum = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingPaidTarget = 14200000 - currentPaymentsSum;
 
+  const historicalTerms = [
+    { year: '2024-2025', feeType: 'Q1 Tuition' as const, dueDate: '2024-05-15', payDate: '2024-05-10' },
+    { year: '2024-2025', feeType: 'Q2 Tuition' as const, dueDate: '2024-08-15', payDate: '2024-08-12' },
+    { year: '2024-2025', feeType: 'Q3 Tuition' as const, dueDate: '2024-11-15', payDate: '2024-11-14' },
+    { year: '2024-2025', feeType: 'Q4 Tuition' as const, dueDate: '2025-02-15', payDate: '2025-02-11' },
+    { year: '2025-2026', feeType: 'Q1 Tuition' as const, dueDate: '2025-05-15', payDate: '2025-05-12' },
+    { year: '2025-2026', feeType: 'Q2 Tuition' as const, dueDate: '2025-08-15', payDate: '2025-08-10' },
+  ];
+
   if (remainingPaidTarget > 0) {
-    const paidChunkPerStudent = Math.floor(remainingPaidTarget / students.length);
-    let historicalResidue = remainingPaidTarget - paidChunkPerStudent * students.length;
+    const totalSlots = students.length;
+    const baseChunk = Math.floor(remainingPaidTarget / totalSlots);
+    let historicalResidue = remainingPaidTarget - baseChunk * totalSlots;
 
     students.forEach((student, idx) => {
       const parent = parents.find((p) => p.id === student.parentId) || parents[0];
-      const pAmount = paidChunkPerStudent + (idx === 0 ? historicalResidue : 0);
+      const pAmount = baseChunk + (idx === 0 ? historicalResidue : 0);
       if (pAmount <= 0) return;
 
+      const term = historicalTerms[idx % historicalTerms.length];
       const invId = `inv-${invIdCounter++}`;
+
       feeInvoices.push({
         id: invId,
-        invoiceNo: `INV-2025-${invIdCounter}`,
+        invoiceNo: `INV-${term.year.substring(0, 4)}-${invIdCounter}`,
         studentId: student.id,
         studentName: student.name,
         parentId: parent.id,
         parentName: parent.name,
         className: student.className,
-        feeType: 'Q1 Tuition',
+        feeType: term.feeType,
         amountDue: pAmount,
         amountPaid: pAmount,
         outstandingBalance: 0,
-        dueDate: '2026-02-10',
-        academicYear: '2025-2026',
+        dueDate: term.dueDate,
+        academicYear: term.year,
         status: 'PAID',
         agingDays: 0,
       });
 
       payments.push({
         id: `pay-${payIdCounter++}`,
-        receiptNo: `REC-2025-${payIdCounter}`,
+        receiptNo: `REC-${term.year.substring(0, 4)}-${payIdCounter}`,
         invoiceId: invId,
         studentId: student.id,
         studentName: student.name,
         parentId: parent.id,
         parentName: parent.name,
         className: student.className,
-        feeType: 'Q1 Tuition',
+        feeType: term.feeType,
         amount: pAmount,
-        paymentDate: '2026-02-10',
+        paymentDate: term.payDate,
         paymentMethod: prng.pick(['Bank Transfer', 'UPI', 'Cheque', 'Cash']),
         status: 'Success',
       });
@@ -681,7 +706,7 @@ export function generateSeedData(): SeedDataStore {
     metrics,
   };
 
-  // Run seed data validation
+  // Run strict seed data validation
   validateSeedData(seedStore);
 
   return seedStore;

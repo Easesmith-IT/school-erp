@@ -19,6 +19,7 @@ import {
   Clock,
   BookOpen,
 } from 'lucide-react';
+import { Student, Parent, Teacher } from '@/types/schema';
 import { store } from '@/lib/store';
 import { getTeacherCohortBreakdown } from '@/lib/aggregations';
 import { NiwaService } from '@/services/niwa.service';

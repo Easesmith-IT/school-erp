@@ -1,74 +1,50 @@
 import { Student, Teacher, Parent, FeeInvoice, PaymentRecord, DashboardMetrics } from '@/types/schema';
+import { INTELLIGENCE_CONFIG, DEMO_DATE } from './config/intelligence-config';
 import {
-  getSchoolAttendanceSummary,
-  getTotalOverdue,
-  getAgingBreakdown,
   getClassPerformanceSummary,
+  getTeacherCohortBreakdown,
 } from './aggregations';
-import { formatLakhs, formatCrores } from './formatters';
-import { DEMO_DATE, INTELLIGENCE_CONFIG } from './config/intelligence-config';
 
-export type InsightType =
-  | 'STUDENT_RISK'
-  | 'ATTENDANCE'
-  | 'ACADEMIC'
-  | 'TEACHER'
-  | 'FINANCIAL'
-  | 'OVERDUE'
-  | 'RECOVERY'
-  | 'PARENT_PAYMENT'
-  | 'CLASS_PERFORMANCE';
-
-export interface Insight {
+export interface ManagementInsight {
   id: string;
-  type: InsightType;
+  type: 'ACADEMIC' | 'RISK' | 'TEACHER' | 'FINANCE' | 'RECOVERY';
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
   title: string;
   description: string;
   whyItMatters: string;
-  sourceEntityType?: 'Student' | 'Parent' | 'Teacher' | 'Class' | 'Finance';
-  sourceEntityId?: string;
   actionLabel: string;
   actionRoute: string;
   factText: string;
   interpretationText: string;
-}
-
-export interface SchoolHealthOverview {
-  academicScore: number;
-  attendanceScore: number;
-  financialScore: number; // collection rate
-  riskStatus: string;
-  teacherPerformanceScore: number;
-  academicNote: string;
-  attendanceNote: string;
-  financialNote: string;
-  riskNote: string;
-  teacherNote: string;
+  sourceEntityType: string;
+  sourceEntityId: string;
 }
 
 export function getSchoolHealthOverview(
   students: Student[],
   teachers: Teacher[],
   metrics: DashboardMetrics
-): SchoolHealthOverview {
-  const avgTeacherPerf = teachers.length
-    ? Number((teachers.reduce((acc, t) => acc + t.performanceBreakdown.score, 0) / teachers.length).toFixed(1))
-    : 0;
+) {
+  const totalStudents = students.length || 1;
+  const highRiskStudents = students.filter((s) => s.riskLevel === 'High');
 
-  const atRiskCount = students.filter((s) => s.riskLevel !== 'Low').length;
+  const avgAcademic =
+    students.reduce((acc, s) => acc + s.performanceBreakdown.academicScore, 0) / totalStudents;
+  const avgAttendance =
+    students.reduce((acc, s) => acc + s.discipline.attendancePercentage, 0) / totalStudents;
+
+  const healthyTeachers = teachers.filter(
+    (t) => t.performanceBreakdown.score >= INTELLIGENCE_CONFIG.TEACHER_TARGET_THRESHOLD
+  );
+  const teacherEffectivenessRate =
+    teachers.length > 0 ? Number(((healthyTeachers.length / teachers.length) * 100).toFixed(1)) : 0;
 
   return {
-    academicScore: metrics.avgPerformance,
-    attendanceScore: metrics.avgAttendance,
-    financialScore: metrics.collectionRate,
-    riskStatus: atRiskCount > 50 ? 'Attention Required' : 'Healthy',
-    teacherPerformanceScore: avgTeacherPerf,
-    academicNote: 'Current academic term average score across all enrolled students',
-    attendanceNote: 'Current school-wide attendance average percentage',
-    financialNote: 'Fee collection rate reconciled against total expected fees',
-    riskNote: `${atRiskCount} students currently flagged for academic/discipline risk`,
-    teacherNote: `Average teacher performance index across ${teachers.length} faculty members`,
+    academicHealthScore: Number(avgAcademic.toFixed(1)),
+    attendanceRate: Number(avgAttendance.toFixed(1)),
+    financialCollectionRate: metrics.collectionRate,
+    teacherEffectivenessRate,
+    studentsNeedingIntervention: highRiskStudents.length,
   };
 }
 
@@ -79,74 +55,63 @@ export function getManagementInsights(
   invoices: FeeInvoice[],
   payments: PaymentRecord[],
   metrics: DashboardMetrics
-): Insight[] {
-  const insights: Insight[] = [];
+): ManagementInsight[] {
+  const insights: ManagementInsight[] = [];
   const demoTime = new Date(DEMO_DATE).getTime();
 
-  // 1. High Risk Students Insight
-  const dualRiskCount = students.filter(
-    (s) =>
-      s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD &&
-      s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD
-  ).length;
+  // 1. High Risk Student Cluster Insight
+  const highRiskStudents = students.filter((s) => s.riskLevel === 'High');
+  if (highRiskStudents.length > 0) {
+    const primaryHighRisk = highRiskStudents[0];
+    insights.push({
+      id: 'insight-risk-high',
+      type: 'RISK',
+      severity: 'HIGH',
+      title: `${highRiskStudents.length} students exhibit high-risk indicators`,
+      description: `Primary flag: ${primaryHighRisk.name} (${primaryHighRisk.className}, Admission #${primaryHighRisk.admissionNo}) has ${primaryHighRisk.discipline.attendancePercentage}% attendance and ${primaryHighRisk.discipline.homeworkCompletionPercentage}% homework completion.`,
+      whyItMatters:
+        'Dual attendance and homework completion drops correlate with lower term exam performance.',
+      actionLabel: 'View High-Risk Roster',
+      actionRoute: '/students/risk',
+      factText: `${highRiskStudents.length} students flagged in High Risk tier.`,
+      interpretationText: 'Multiple compounding risk factors present across attendance and homework.',
+      sourceEntityType: 'Student',
+      sourceEntityId: primaryHighRisk.id,
+    });
+  }
 
-  insights.push({
-    id: 'insight-student-risk',
-    type: 'STUDENT_RISK',
-    severity: 'HIGH',
-    title: `${metrics.studentsAtRiskCount} students require academic attention`,
-    description: `${dualRiskCount} students show dual attendance and homework completion decline.`,
-    whyItMatters:
-      'Students exhibiting simultaneous attendance and homework completion decline display multiple active intervention indicators.',
-    actionLabel: 'Review At-Risk Students',
-    actionRoute: '/students/risk',
-    factText: `${dualRiskCount} students have attendance < ${INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD}% and homework completion < ${INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD}%.`,
-    interpretationText: 'Multiple intervention indicators are active. Immediate coordinator review recommended.',
-    sourceEntityType: 'Student',
-  });
+  // 2. Financial Overdue Risk Insight
+  if (metrics.totalOverdue > 0) {
+    insights.push({
+      id: 'insight-finance-overdue',
+      type: 'FINANCE',
+      severity: 'HIGH',
+      title: `₹${(metrics.totalOverdue / 100000).toFixed(1)}L overdue fees across aging buckets`,
+      description: `₹${(metrics.agingBuckets.days90Plus / 100000).toFixed(1)}L is currently past ${INTELLIGENCE_CONFIG.RECOVERY_ESCALATION_DAYS} days past due date.`,
+      whyItMatters:
+        'Older aging buckets require structured communication and recovery workflows to maintain cash flow.',
+      actionLabel: 'Inspect Aging Buckets',
+      actionRoute: '/finance/aging',
+      factText: `Total overdue balance is ₹${metrics.totalOverdue.toLocaleString('en-IN')}.`,
+      interpretationText: 'Aging balances require active recovery follow-up.',
+      sourceEntityType: 'Finance',
+      sourceEntityId: 'aging-summary',
+    });
+  }
 
-  // 2. Overdue Fees Aging Insight
-  const aging = getAgingBreakdown(invoices, DEMO_DATE);
-  const overdueLakhs = (metrics.totalOverdue / 100000).toFixed(1);
-  const ninetyPlusLakhs = (aging.days90Plus / 100000).toFixed(1);
-
-  insights.push({
-    id: 'insight-aging-overdue',
-    type: 'OVERDUE',
-    severity: 'HIGH',
-    title: `₹${ninetyPlusLakhs}L in 90+ day overdue fee bucket`,
-    description: `Total overdue balance stands at ₹${overdueLakhs}L across all fee terms.`,
-    whyItMatters:
-      'Accounts past 90 days represent critical overdue balances requiring structured recovery review.',
-    actionLabel: 'Review Recovery Queue',
-    actionRoute: '/finance/aging',
-    factText: `₹${ninetyPlusLakhs}L is 90+ days past due date out of ₹${overdueLakhs}L total overdue.`,
-    interpretationText: 'This is the highest-risk financial aging segment requiring executive recovery workflow.',
-    sourceEntityType: 'Finance',
-  });
-
-  // 3. Top Class Performance & Growth
+  // 3. Class Academic Leadership Insight
   const classSummaries = getClassPerformanceSummary(students);
   if (classSummaries.length > 0) {
     const topClass = classSummaries[0];
-    const classStudents = students.filter((s) => s.className === topClass.className);
-    let classGrowth = 0;
-    if (classStudents.length > 0) {
-      const avgCurr = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / classStudents.length;
-      const avgPa1 = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / classStudents.length;
-      classGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
-    }
-    const sign = classGrowth >= 0 ? '+' : '';
-
     insights.push({
-      id: 'insight-class-top-growth',
-      type: 'CLASS_PERFORMANCE',
+      id: 'insight-class-top',
+      type: 'ACADEMIC',
       severity: 'LOW',
-      title: `Class ${topClass.className} performance score reached ${topClass.avgPerformance}%`,
-      description: `Class ${topClass.className} shows ${sign}${classGrowth}% assessment movement with ${topClass.avgAttendance}% attendance.`,
+      title: `Class ${topClass.className} leads academic performance benchmark`,
+      description: `Class ${topClass.className} achieved highest cohort average score of ${topClass.avgPerformance}%.`,
       whyItMatters:
-        'Class cohort performance tracking identifies section-level academic movement across terms.',
-      actionLabel: `Explore Class ${topClass.className}`,
+        'Understanding top-performing section dynamics provides instructional models for other sections.',
+      actionLabel: 'View Section Analysis',
       actionRoute: `/students/class?from=class-${topClass.className.toLowerCase().replace(/\s+/g, '')}`,
       factText: `Class ${topClass.className} cohort average performance score is ${topClass.avgPerformance}%.`,
       interpretationText: 'Class cohort average is leading school performance benchmark.',
@@ -194,7 +159,7 @@ export function getManagementInsights(
 
   if (parents.length > 0) {
     const highRelOverdueParent = parents.find(
-      (p) => p.paymentReliabilityScore >= INTELLIGENCE_CONFIG.FEE_CREDIT_HIGH_RELIABILITY_THRESHOLD && p.familyTotalOutstanding > 0
+      (p) => p.paymentReliabilityScore >= INTELLIGENCE_CONFIG.PARENT_RELIABILITY_HIGH_THRESHOLD && p.familyTotalOutstanding > 0
     ) || parents[0];
 
     insights.push({
@@ -221,6 +186,7 @@ export function getExecutivePriorityQueue(
   students: Student[],
   teachers: Teacher[],
   parents: Parent[],
+  invoices: FeeInvoice[],
   metrics: DashboardMetrics
 ) {
   const demoTime = new Date(DEMO_DATE).getTime();
@@ -228,11 +194,11 @@ export function getExecutivePriorityQueue(
     (t) => t.performanceBreakdown.score < INTELLIGENCE_CONFIG.TEACHER_TARGET_THRESHOLD
   ).length;
 
-  const overdueInvoices = (storeInvoices: FeeInvoice[]) =>
-    storeInvoices.filter((inv) => inv.outstandingBalance > 0 && new Date(inv.dueDate).getTime() < demoTime);
-
-  // We derive overdue cases count from students/parents/invoices context
-  const overdueCasesCount = parents.filter((p) => p.familyTotalOutstanding > 0).length;
+  const overdueInvoices = invoices.filter(
+    (inv) => inv.outstandingBalance > 0 && new Date(inv.dueDate).getTime() < demoTime
+  );
+  const overdueParentIds = new Set(overdueInvoices.map((inv) => inv.parentId));
+  const overdueCasesCount = overdueParentIds.size;
 
   return [
     {
@@ -278,11 +244,12 @@ export function getPrincipalMorningBrief(
   students: Student[],
   teachers: Teacher[],
   parents: Parent[],
+  invoices: FeeInvoice[],
   metrics: DashboardMetrics
 ) {
   const classSummaries = getClassPerformanceSummary(students);
-  const topClass = classSummaries[0] || { className: '8-A', avgPerformance: 81.4 };
-  const classStudents = students.filter((s) => s.className === topClass.className);
+  const topClass = classSummaries[0];
+  const classStudents = topClass ? students.filter((s) => s.className === topClass.className) : [];
   let classGrowth = 0;
   if (classStudents.length > 0) {
     const avgCurr = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / classStudents.length;
@@ -292,8 +259,8 @@ export function getPrincipalMorningBrief(
   const classSign = classGrowth >= 0 ? '+' : '';
 
   const sortedTeachers = [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
-  const topTeacher = sortedTeachers[0] || { id: 'teacher-1', name: 'Priya Sharma', performanceBreakdown: { score: 91.4 } };
-  const assignedStudents = students.filter((s) => topTeacher.assignedClasses?.includes(s.className));
+  const topTeacher = sortedTeachers[0];
+  const assignedStudents = topTeacher ? students.filter((s) => topTeacher.assignedClasses?.includes(s.className)) : [];
   let tGrowth = 0;
   if (assignedStudents.length > 0) {
     const avgCurr = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / assignedStudents.length;
@@ -308,7 +275,11 @@ export function getPrincipalMorningBrief(
       s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD
   ).length;
 
-  const overdueCasesCount = parents.filter((p) => p.familyTotalOutstanding > 0).length;
+  const demoTime = new Date(DEMO_DATE).getTime();
+  const overdueInvoices = invoices.filter(
+    (inv) => inv.outstandingBalance > 0 && new Date(inv.dueDate).getTime() < demoTime
+  );
+  const overdueCasesCount = new Set(overdueInvoices.map((inv) => inv.parentId)).size;
 
   const highRiskStudent = students.find((s) => s.riskLevel === 'High') || students[0];
 
@@ -316,13 +287,17 @@ export function getPrincipalMorningBrief(
     goodNews: [
       {
         id: 'gn-1',
-        text: `Class ${topClass.className} shows ${classSign}${classGrowth}% assessment movement, reaching average academic score of ${topClass.avgPerformance}%.`,
+        text: topClass
+          ? `Class ${topClass.className} shows ${classSign}${classGrowth}% assessment movement, reaching average academic score of ${topClass.avgPerformance}%.`
+          : 'N/A',
         route: '/students/class',
       },
       {
         id: 'gn-2',
-        text: `${topTeacher.name}'s assigned cohort demonstrated ${tSign}${tGrowth}% assessment movement (Index ${topTeacher.performanceBreakdown.score}, Rank #1).`,
-        route: `/teachers/${topTeacher.id}`,
+        text: topTeacher
+          ? `${topTeacher.name}'s assigned cohort demonstrated ${tSign}${tGrowth}% assessment movement (Index ${topTeacher.performanceBreakdown.score}, Rank #1).`
+          : 'N/A',
+        route: topTeacher ? `/teachers/${topTeacher.id}` : '/teachers',
       },
       {
         id: 'gn-3',
@@ -343,8 +318,10 @@ export function getPrincipalMorningBrief(
       },
       {
         id: 'att-3',
-        text: `${highRiskStudent.name} (Admission #${highRiskStudent.admissionNo}) exhibits ${highRiskStudent.discipline.attendancePercentage}% attendance and ${highRiskStudent.discipline.homeworkCompletionPercentage}% homework completion.`,
-        route: `/students/${highRiskStudent.id}`,
+        text: highRiskStudent
+          ? `${highRiskStudent.name} (Admission #${highRiskStudent.admissionNo}) exhibits ${highRiskStudent.discipline.attendancePercentage}% attendance and ${highRiskStudent.discipline.homeworkCompletionPercentage}% homework completion.`
+          : 'N/A',
+        route: highRiskStudent ? `/students/${highRiskStudent.id}` : '/students',
       },
     ],
     todayActions: [

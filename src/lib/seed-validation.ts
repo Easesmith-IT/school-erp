@@ -9,7 +9,7 @@ export interface ValidationError {
 
 export function validateSeedData(data: SeedDataStore): ValidationError[] {
   const errors: ValidationError[] = [];
-  const demoTime = new Date(DEMO_DATE).getTime();
+  const demoTime = new Date(`${DEMO_DATE}T23:59:59.999Z`).getTime();
 
   const studentIds = new Set<string>();
   const parentIds = new Set<string>();
@@ -106,11 +106,8 @@ export function validateSeedData(data: SeedDataStore): ValidationError[] {
       if (dueTime < demoTime && inv.status === 'CURRENT') {
         errors.push({ entityType: 'FeeInvoice', entityId: inv.id, message: `Overdue invoice (due ${inv.dueDate}) has status CURRENT` });
       }
-      if (dueTime > demoTime && (inv.status === 'OVERDUE' || inv.status === 'PARTIALLY_PAID' && dueTime > demoTime + 86400000)) {
-        // Future due dates with 0 overdue days shouldn't be OVERDUE
-        if (inv.status === 'OVERDUE') {
-          errors.push({ entityType: 'FeeInvoice', entityId: inv.id, message: `Future invoice (due ${inv.dueDate}) marked OVERDUE` });
-        }
+      if (dueTime > demoTime && inv.status === 'OVERDUE') {
+        errors.push({ entityType: 'FeeInvoice', entityId: inv.id, message: `Future invoice (due ${inv.dueDate}) marked OVERDUE` });
       }
     }
   });
@@ -142,17 +139,16 @@ export function validateSeedData(data: SeedDataStore): ValidationError[] {
     }
     commIds.add(c.id);
 
-    if (new Date(c.createdAt).getTime() > demoTime + 86400000) { // allow same-day timestamps
+    if (new Date(c.createdAt).getTime() > demoTime) {
       errors.push({ entityType: 'CommunicationLog', entityId: c.id, message: `Communication createdAt ${c.createdAt} is in the future (> DEMO_DATE ${DEMO_DATE})` });
     }
   });
 
   if (errors.length > 0) {
-    console.error(`[SeedValidation] Found ${errors.length} data integrity violations:`);
-    errors.forEach((e) => console.error(` - [${e.entityType}:${e.entityId}] ${e.message}`));
-  } else {
-    console.log('[SeedValidation] Seed data validation passed cleanly (0 errors).');
+    const errorDetails = errors.map((e) => ` - [${e.entityType}:${e.entityId}] ${e.message}`).join('\n');
+    throw new Error(`[SeedValidation] Seed data validation failed with ${errors.length} errors:\n${errorDetails}`);
   }
 
+  console.log('[SeedValidation] Seed data validation passed cleanly (0 errors).');
   return errors;
 }

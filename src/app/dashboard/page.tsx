@@ -103,12 +103,12 @@ export default function PrincipalDashboardPage() {
     [students, teachers, parents, feeInvoices, payments, metrics]
   );
   const morningBrief = useMemo(
-    () => getPrincipalMorningBrief(students, teachers, parents, metrics),
-    [students, teachers, parents, metrics]
+    () => getPrincipalMorningBrief(students, teachers, parents, feeInvoices, metrics),
+    [students, teachers, parents, feeInvoices, metrics]
   );
   const priorityQueue = useMemo(
-    () => getExecutivePriorityQueue(students, teachers, parents, metrics),
-    [students, teachers, parents, metrics]
+    () => getExecutivePriorityQueue(students, teachers, parents, feeInvoices, metrics),
+    [students, teachers, parents, feeInvoices, metrics]
   );
 
   // Attendance Summary & Class Performance
