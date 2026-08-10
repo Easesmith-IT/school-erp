@@ -1,71 +1,28 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { store } from '@/lib/store';
-import { Award, BarChart3, ArrowUpRight } from 'lucide-react';
+import { Award, ArrowUpRight, TrendingDown, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TeacherRankingsPage() {
   const teachers = store.getTeachers();
+  const ranked = useMemo(() => [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score), [teachers]);
+  const avgScore = teachers.length ? teachers.reduce((s, t) => s + t.performanceBreakdown.score, 0) / teachers.length : 0;
+  const avgImprovement = teachers.length ? teachers.reduce((s, t) => s + t.performanceBreakdown.studentImprovement, 0) / teachers.length : 0;
+  const top = ranked[0];
+  const needsCoaching = [...teachers].sort((a, b) => a.performanceBreakdown.score - b.performanceBreakdown.score).slice(0, 4);
 
-  return (
-    <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Teacher Rankings Leaderboard</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Comparative performance rankings derived dynamically from student cohort outcomes
-            </p>
-          </div>
-          <Link href="/teachers/comparison" className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-500">
-            Compare Educators →
-          </Link>
-        </div>
-
-        {/* Teacher Ranking Table */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
-                <tr>
-                  <th className="py-2.5 px-3">Rank</th>
-                  <th className="py-2.5 px-3">Teacher</th>
-                  <th className="py-2.5 px-3">Subject</th>
-                  <th className="py-2.5 px-3">Performance Index</th>
-                  <th className="py-2.5 px-3">Student Impr</th>
-                  <th className="py-2.5 px-3">Academic</th>
-                  <th className="py-2.5 px-3">Attendance</th>
-                  <th className="py-2.5 px-3">Parent Feedback</th>
-                  <th className="py-2.5 px-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {teachers.map((t, idx) => (
-                  <tr key={t.id} className={`hover:bg-slate-50 ${idx === 0 ? 'bg-amber-50/50' : ''}`}>
-                    <td className="py-3 px-3 font-bold text-slate-900">
-                      {idx === 0 ? <span className="px-2 py-0.5 bg-amber-400 text-amber-950 font-bold rounded-full">#1</span> : `#${idx + 1}`}
-                    </td>
-                    <td className="py-3 px-3 font-bold text-slate-900">{t.name}</td>
-                    <td className="py-3 px-3 text-slate-500">{t.subject}</td>
-                    <td className="py-3 px-3 font-extrabold text-blue-600 text-sm">{t.performanceBreakdown.score}</td>
-                    <td className="py-3 px-3 text-emerald-600 font-semibold">+{t.performanceBreakdown.studentImprovement.toFixed(1)}%</td>
-                    <td className="py-3 px-3 text-slate-700">{t.avgStudentPerformance}%</td>
-                    <td className="py-3 px-3 text-slate-700">{t.avgAttendance}%</td>
-                    <td className="py-3 px-3 font-semibold text-amber-600">{t.performanceBreakdown.parentFeedback}</td>
-                    <td className="py-3 px-3">
-                      <Link href={`/teachers/${t.id}`} className="text-blue-600 font-semibold hover:underline">
-                        Profile
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </AppShell>
-  );
+  return <AppShell><div className="max-w-[1500px] mx-auto pb-12 space-y-5">
+    <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><div className="text-[11px] uppercase tracking-[0.12em] font-bold text-blue-600 mb-1">Teachers / Performance Intelligence</div><h1 className="text-2xl font-bold tracking-tight text-[#172033]">Teacher Rankings</h1><p className="text-sm text-slate-500 mt-1">Compare educator outcomes using the performance indicators already captured by the ERP.</p></div><Link href="/teachers/comparison" className="px-3.5 py-2 rounded-lg bg-[#2563EB] text-white text-xs font-semibold">Compare educators →</Link></header>
+    <section className="grid grid-cols-2 lg:grid-cols-4 gap-4"><Metric title="Average Index" value={avgScore.toFixed(1)} sub="Across configured teachers" /><Metric title="Avg Student Improvement" value={`${avgImprovement >= 0 ? '+' : ''}${avgImprovement.toFixed(1)}%`} sub="Cohort outcome movement" tone="emerald" /><Metric title="Top Educator" value={top?.name || '—'} sub={top ? `${top.performanceBreakdown.score} performance index` : 'No data'} /><Metric title="Coaching Queue" value={needsCoaching.length.toString()} sub="Lowest-ranked cohort" tone="amber" /></section>
+    <section className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between mb-5"><div><h2 className="font-semibold text-[#172033]">Performance leaderboard</h2><p className="text-xs text-slate-500 mt-0.5">Rank is based on the configured teacher performance index.</p></div><Award className="w-5 h-5 text-amber-500" /></div><div className="space-y-3">{ranked.map((t, idx) => <div key={t.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50"><div className="flex items-center gap-3"><div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-extrabold ${idx === 0 ? 'bg-amber-100 text-amber-800' : 'bg-white text-slate-600 border border-slate-200'}`}>#{idx + 1}</div><div className="flex-1 min-w-0"><div className="font-bold text-sm text-slate-900">{t.name}</div><div className="text-[10px] text-slate-500">{t.subject} · {t.studentCount} students</div></div><div className="text-right"><div className="text-lg font-extrabold text-blue-600">{t.performanceBreakdown.score}</div><div className="text-[10px] text-slate-400">index</div></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-[10px]"><Mini label="Student growth" value={`+${t.performanceBreakdown.studentImprovement.toFixed(1)}%`} /><Mini label="Academic" value={`${t.avgStudentPerformance}%`} /><Mini label="Attendance" value={`${t.avgAttendance}%`} /><Mini label="Parent feedback" value={`${t.performanceBreakdown.parentFeedback}`} /></div></div>)}</div></div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-[#172033]">Management signals</h2><p className="text-xs text-slate-500 mt-0.5 mb-5">Where leadership should look next.</p>{top && <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100"><div className="flex gap-2"><TrendingUp className="w-4 h-4 text-emerald-600" /><div><div className="text-xs font-bold text-emerald-900">Leading educator</div><div className="text-sm font-extrabold text-emerald-950 mt-1">{top.name}</div><div className="text-[11px] text-emerald-800 mt-1">{top.performanceBreakdown.score} index with +{top.performanceBreakdown.studentImprovement.toFixed(1)}% student improvement.</div></div></div></div>}{needsCoaching.map((t) => <div key={t.id} className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-100 flex items-center gap-3"><TrendingDown className="w-4 h-4 text-amber-600" /><div className="flex-1"><div className="text-xs font-bold text-slate-900">{t.name}</div><div className="text-[10px] text-slate-500">Index {t.performanceBreakdown.score} · improvement +{t.performanceBreakdown.studentImprovement.toFixed(1)}%</div></div><Link href={`/teachers/${t.id}`} className="text-[10px] font-bold text-blue-600 inline-flex items-center gap-1">Profile <ArrowUpRight className="w-3 h-3" /></Link></div>)}</div>
+    </section>
+    <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-semibold text-[#172033]">Detailed comparison table</h2></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Rank</th><th className="p-3">Teacher</th><th className="p-3">Subject</th><th className="p-3">Index</th><th className="p-3">Student Improvement</th><th className="p-3">Academic</th><th className="p-3">Attendance</th><th className="p-3">Parent Feedback</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{ranked.map((t, idx) => <tr key={t.id} className="hover:bg-slate-50"><td className="p-3 font-bold">#{idx + 1}</td><td className="p-3 font-bold text-slate-900">{t.name}</td><td className="p-3 text-slate-500">{t.subject}</td><td className="p-3 font-extrabold text-blue-600">{t.performanceBreakdown.score}</td><td className="p-3 text-emerald-600 font-semibold">+{t.performanceBreakdown.studentImprovement.toFixed(1)}%</td><td className="p-3">{t.avgStudentPerformance}%</td><td className="p-3">{t.avgAttendance}%</td><td className="p-3">{t.performanceBreakdown.parentFeedback}</td><td className="p-3"><Link href={`/teachers/${t.id}`} className="text-blue-600 font-semibold">Profile</Link></td></tr>)}</tbody></table></div></section>
+  </div></AppShell>;
 }
+function Metric({ title, value, sub, tone = 'blue' }: { title: string; value: string; sub: string; tone?: 'blue' | 'emerald' | 'amber' }) { const c = tone === 'emerald' ? 'text-emerald-600' : tone === 'amber' ? 'text-amber-600' : 'text-blue-600'; return <div className="bg-white rounded-2xl border border-slate-200 p-5"><div className="text-xs font-semibold text-slate-500">{title}</div><div className={`text-xl font-extrabold mt-2 ${c} truncate`}>{value}</div><div className="text-[11px] text-slate-500 mt-1">{sub}</div></div>; }
+function Mini({ label, value }: { label: string; value: string }) { return <div><div className="text-slate-400">{label}</div><div className="font-bold text-slate-800 mt-0.5">{value}</div></div>; }
