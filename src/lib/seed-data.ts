@@ -339,16 +339,14 @@ export function generateSeedData(): SeedDataStore {
 
     const perfBreakdown = calculateStudentPerformance(academics, discipline, engagement, parentEng);
 
-    let pa1 = isPriyaCohort ? Math.max(50, perfBreakdown.score - 5.2) : perfBreakdown.score + 0.0;
-    let pa2 = pa1 + 1.5;
-    let sa1 = pa2 + 1.5;
-    let current = perfBreakdown.score;
+    // Dynamic assessment trend generation with PRNG variance
+    const curr = perfBreakdown.score;
+    const pa1Offset = isPriyaCohort ? prng.nextFloat(4.5, 6.0) : prng.nextFloat(-1.5, 2.5);
+    const pa1 = Number(Math.min(100, Math.max(40, curr - pa1Offset)).toFixed(1));
+    const pa2 = Number(Math.min(100, Math.max(40, pa1 + prng.nextFloat(0.5, 2.0))).toFixed(1));
+    const sa1 = Number(Math.min(100, Math.max(40, pa2 + prng.nextFloat(0.5, 2.0))).toFixed(1));
 
-    pa1 = Number(Math.min(100, Math.max(40, pa1)).toFixed(1));
-    pa2 = Number(Math.min(100, Math.max(40, pa2)).toFixed(1));
-    sa1 = Number(Math.min(100, Math.max(40, sa1)).toFixed(1));
-
-    const trend = { pa1, pa2, sa1, current };
+    const trend = { pa1, pa2, sa1, current: curr };
     const risk = calculateStudentRisk(discipline, trend, perfBreakdown.score);
 
     let sOutstanding = 0;
@@ -423,7 +421,7 @@ export function generateSeedData(): SeedDataStore {
   // Sort teachers dynamically by calculated performance breakdown score
   teachers.sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
 
-  // 6. Generate 24-Month Rich Financial Invoices & Payment Records
+  // 6. Generate 24-Month Multi-Period Historical Invoices & Payment Records
   const feeInvoices: FeeInvoice[] = [];
   const payments: PaymentRecord[] = [];
 
@@ -584,7 +582,7 @@ export function generateSeedData(): SeedDataStore {
     }
   });
 
-  // Generate 24-Month Historical Paid Invoices and Payments across students
+  // Generate Multi-Period 24-Month Historical Invoices and Payments across ALL 1,248 students
   const currentPaymentsSum = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingPaidTarget = 14200000 - currentPaymentsSum;
 
@@ -594,54 +592,57 @@ export function generateSeedData(): SeedDataStore {
     { year: '2024-2025', feeType: 'Q3 Tuition' as const, dueDate: '2024-11-15', payDate: '2024-11-14' },
     { year: '2024-2025', feeType: 'Q4 Tuition' as const, dueDate: '2025-02-15', payDate: '2025-02-11' },
     { year: '2025-2026', feeType: 'Q1 Tuition' as const, dueDate: '2025-05-15', payDate: '2025-05-12' },
-    { year: '2025-2026', feeType: 'Q2 Tuition' as const, dueDate: '2025-08-15', payDate: '2025-08-10' },
   ];
 
   if (remainingPaidTarget > 0) {
-    const totalSlots = students.length;
+    const termsCount = historicalTerms.length;
+    const totalSlots = students.length * termsCount;
     const baseChunk = Math.floor(remainingPaidTarget / totalSlots);
     let historicalResidue = remainingPaidTarget - baseChunk * totalSlots;
 
-    students.forEach((student, idx) => {
+    students.forEach((student, sIdx) => {
       const parent = parents.find((p) => p.id === student.parentId) || parents[0];
-      const pAmount = baseChunk + (idx === 0 ? historicalResidue : 0);
-      if (pAmount <= 0) return;
 
-      const term = historicalTerms[idx % historicalTerms.length];
-      const invId = `inv-${invIdCounter++}`;
+      historicalTerms.forEach((term, tIdx) => {
+        const slotIdx = sIdx * termsCount + tIdx;
+        const pAmount = baseChunk + (slotIdx === 0 ? historicalResidue : 0);
+        if (pAmount <= 0) return;
 
-      feeInvoices.push({
-        id: invId,
-        invoiceNo: `INV-${term.year.substring(0, 4)}-${invIdCounter}`,
-        studentId: student.id,
-        studentName: student.name,
-        parentId: parent.id,
-        parentName: parent.name,
-        className: student.className,
-        feeType: term.feeType,
-        amountDue: pAmount,
-        amountPaid: pAmount,
-        outstandingBalance: 0,
-        dueDate: term.dueDate,
-        academicYear: term.year,
-        status: 'PAID',
-        agingDays: 0,
-      });
+        const invId = `inv-${invIdCounter++}`;
 
-      payments.push({
-        id: `pay-${payIdCounter++}`,
-        receiptNo: `REC-${term.year.substring(0, 4)}-${payIdCounter}`,
-        invoiceId: invId,
-        studentId: student.id,
-        studentName: student.name,
-        parentId: parent.id,
-        parentName: parent.name,
-        className: student.className,
-        feeType: term.feeType,
-        amount: pAmount,
-        paymentDate: term.payDate,
-        paymentMethod: prng.pick(['Bank Transfer', 'UPI', 'Cheque', 'Cash']),
-        status: 'Success',
+        feeInvoices.push({
+          id: invId,
+          invoiceNo: `INV-${term.year.substring(0, 4)}-${invIdCounter}`,
+          studentId: student.id,
+          studentName: student.name,
+          parentId: parent.id,
+          parentName: parent.name,
+          className: student.className,
+          feeType: term.feeType,
+          amountDue: pAmount,
+          amountPaid: pAmount,
+          outstandingBalance: 0,
+          dueDate: term.dueDate,
+          academicYear: term.year,
+          status: 'PAID',
+          agingDays: 0,
+        });
+
+        payments.push({
+          id: `pay-${payIdCounter++}`,
+          receiptNo: `REC-${term.year.substring(0, 4)}-${payIdCounter}`,
+          invoiceId: invId,
+          studentId: student.id,
+          studentName: student.name,
+          parentId: parent.id,
+          parentName: parent.name,
+          className: student.className,
+          feeType: term.feeType,
+          amount: pAmount,
+          paymentDate: term.payDate,
+          paymentMethod: prng.pick(['Bank Transfer', 'UPI', 'Cheque', 'Cash']),
+          status: 'Success',
+        });
       });
     });
   }

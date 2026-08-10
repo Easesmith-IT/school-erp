@@ -70,7 +70,7 @@ export function getManagementInsights(
       title: `${highRiskStudents.length} students exhibit high-risk indicators`,
       description: `Primary flag: ${primaryHighRisk.name} (${primaryHighRisk.className}, Admission #${primaryHighRisk.admissionNo}) has ${primaryHighRisk.discipline.attendancePercentage}% attendance and ${primaryHighRisk.discipline.homeworkCompletionPercentage}% homework completion.`,
       whyItMatters:
-        'Dual attendance and homework completion drops correlate with lower term exam performance.',
+        'Dual attendance and homework completion drops indicate compounding risk requiring coordinated academic intervention.',
       actionLabel: 'View High-Risk Roster',
       actionRoute: '/students/risk',
       factText: `${highRiskStudents.length} students flagged in High Risk tier.`,

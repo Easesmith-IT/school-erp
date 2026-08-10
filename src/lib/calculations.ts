@@ -94,7 +94,7 @@ export function calculateStudentRisk(
 ): { riskLevel: RiskLevel; riskReasons: string[] } {
   const reasons: string[] = [];
 
-  const isAttendanceLow = discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_CRITICAL_THRESHOLD + 10; // <70
+  const isAttendanceLow = discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_WARNING_THRESHOLD; // <70
   const isAttendanceMedium = discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD; // <75
 
   const isHomeworkLow = discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD; // <60
@@ -221,10 +221,10 @@ export function calculatePaymentReliability(
   else if (lateCount >= 3) lateFrequency = 'Moderate';
   else if (lateCount >= 1) lateFrequency = 'Low';
 
-  // Days penalty score calibrated to canonical 86 rating for 38 days average release
-  const delayScore = Math.max(0, 100 - Math.max(0, averageReleaseDays - 30) * 1.5);
-  const lateFreqScore = lateFrequency === 'None' ? 100 : lateFrequency === 'Low' ? 88 : lateFrequency === 'Moderate' ? 68 : 40;
-  const outstandingPenalty = Math.max(0, 100 - Math.min(100, (outstandingAmount / 50000) * 20));
+  // Domain-general delay score (30 days prompt baseline)
+  const delayScore = Math.max(0, 100 - Math.max(0, averageReleaseDays - 30) * 0.5);
+  const lateFreqScore = lateFrequency === 'None' ? 100 : lateFrequency === 'Low' ? 85 : lateFrequency === 'Moderate' ? 65 : 40;
+  const outstandingPenalty = Math.max(0, 100 - Math.min(100, (outstandingAmount / 25000) * 40));
 
   const compositeScore =
     onTimeRate * 0.40 +
