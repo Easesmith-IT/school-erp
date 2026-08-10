@@ -19,8 +19,8 @@ import {
   Clock,
   BookOpen,
 } from 'lucide-react';
-import { Student, Parent, Teacher } from '@/types/schema';
 import { store } from '@/lib/store';
+import { getTeacherCohortBreakdown } from '@/lib/aggregations';
 import { NiwaService } from '@/services/niwa.service';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -308,7 +308,10 @@ export function IntelligenceDrawer({
                 </div>
                 <div className="text-right">
                   <div className="text-xs font-black text-purple-700">Rank #{teacher.performanceBreakdown.score > 90 ? '1' : '2'}</div>
-                  <div className="text-[10px] text-emerald-600 font-bold">+11.4% Cohort Growth</div>
+                  <div className="text-[10px] text-emerald-600 font-bold">
+                    {getTeacherCohortBreakdown(teacher, store.getStudents()).cohortGrowth >= 0 ? '+' : ''}
+                    {getTeacherCohortBreakdown(teacher, store.getStudents()).cohortGrowth}% Cohort Growth
+                  </div>
                 </div>
               </div>
             </div>

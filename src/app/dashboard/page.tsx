@@ -36,6 +36,7 @@ import {
   getClassPerformanceSummary,
   getSchoolAcademicTrendSummary,
   getCollectionVelocity,
+  getTeacherCohortBreakdown,
 } from '@/lib/aggregations';
 import {
   getSchoolHealthOverview,
@@ -86,6 +87,8 @@ export default function PrincipalDashboardPage() {
   const metrics = store.getMetrics();
   const students = useMemo(() => store.getStudents(), []);
   const teachers = useMemo(() => store.getTeachers(), []);
+  const sortedTeachers = useMemo(() => [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score), [teachers]);
+  const topTeacher = sortedTeachers[0];
   const parents = useMemo(() => store.getParents(), []);
   const feeInvoices = useMemo(() => store.getInvoices(), []);
   const payments = useMemo(() => store.getPayments(), []);
@@ -326,20 +329,20 @@ export default function PrincipalDashboardPage() {
                   onClick={() => handleOpenStudentDrawer('student-riya')}
                   className="w-full text-left px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs transition-colors flex items-center justify-between"
                 >
-                  <span>1. Contact Parent (Raj Sharma)</span>
+                  <span>1. Contact Parent</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <Link
                   href="/teachers/teacher-1"
                   className="block px-3 py-2 bg-slate-900 hover:bg-slate-950 text-slate-300 rounded-lg font-semibold text-xs transition-colors"
                 >
-                  2. Review Educator (Priya Sharma)
+                  2. Review Educator Performance
                 </Link>
                 <Link
                   href="/students/class"
                   className="block px-3 py-2 bg-slate-900 hover:bg-slate-950 text-slate-300 rounded-lg font-semibold text-xs transition-colors"
                 >
-                  3. Inspect Class 8-A Cohort
+                  3. Inspect Class Cohort
                 </Link>
               </div>
             </div>
@@ -450,28 +453,30 @@ export default function PrincipalDashboardPage() {
                 </div>
 
                 <div>
-                  <div className="text-lg font-black text-slate-900">Priya Sharma</div>
-                  <div className="text-xs text-slate-500">Mathematics • Class 8-A & 8-B</div>
+                  <div className="text-lg font-black text-slate-900">{topTeacher ? topTeacher.name : 'Top Educator'}</div>
+                  <div className="text-xs text-slate-500">{topTeacher ? `${topTeacher.subject} • Class ${topTeacher.assignedClasses.join(' & ')}` : ''}</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-center bg-purple-50 p-2.5 rounded-lg border border-purple-100">
                   <div>
                     <div className="text-[10px] text-purple-700 font-medium">Teacher Index</div>
-                    <div className="text-sm font-black text-purple-950">91.4</div>
+                    <div className="text-sm font-black text-purple-950">{topTeacher ? topTeacher.performanceBreakdown.score : 0}</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-emerald-700 font-medium">Cohort Growth</div>
-                    <div className="text-sm font-black text-emerald-700">+11.4%</div>
+                    <div className="text-sm font-black text-emerald-700">
+                      {topTeacher ? `${getTeacherCohortBreakdown(topTeacher, store.getStudents()).cohortGrowth >= 0 ? '+' : ''}${getTeacherCohortBreakdown(topTeacher, store.getStudents()).cohortGrowth}%` : '0%'}
+                    </div>
                   </div>
                 </div>
 
                 <div className="text-xs text-slate-600">
-                  Top performing mathematics educator leading cohort progress across Class 8 sections.
+                  Top performing educator leading cohort progress across assigned class sections.
                 </div>
               </div>
 
               <Link
-                href="/teachers/teacher-1"
+                href={`/teachers/${topTeacher ? topTeacher.id : 'teacher-1'}`}
                 className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white font-extrabold text-xs rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 text-center"
               >
                 <span>VIEW EDUCATOR PERFORMANCE</span>
@@ -877,7 +882,7 @@ export default function PrincipalDashboardPage() {
               <div className="text-lg font-extrabold text-emerald-950 mt-1">
                 {formatCrores(metrics.totalFeeCollected)}
               </div>
-              <div className="text-[10px] text-emerald-700 mt-0.5">₹1.42 Cr Reconciled</div>
+              <div className="text-[10px] text-emerald-700 mt-0.5">{metrics.collectionRate}% Collection Rate</div>
             </div>
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -1156,7 +1161,7 @@ export default function PrincipalDashboardPage() {
                         {t.performanceBreakdown.score}
                       </div>
                       <div className="text-[10px] text-emerald-600 font-semibold">
-                        +11.4% Cohort Growth
+                        {getTeacherCohortBreakdown(t, students).cohortGrowth >= 0 ? '+' : ''}{getTeacherCohortBreakdown(t, students).cohortGrowth}% Cohort Growth
                       </div>
                     </div>
                   </Link>
@@ -1166,7 +1171,7 @@ export default function PrincipalDashboardPage() {
 
             <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex justify-between items-center bg-purple-50/50 p-2 rounded-lg border border-purple-100">
               <span>
-                Hero teacher <strong>Priya Sharma</strong> (#1 Rank, Index 91.4) lead educator.
+                Top teacher <strong>{topTeacher ? topTeacher.name : 'Educator'}</strong> (#1 Rank, Index {topTeacher ? topTeacher.performanceBreakdown.score : 0}) lead educator.
               </span>
               <Link href="/teachers" className="text-purple-700 font-semibold hover:underline">
                 Teachers →

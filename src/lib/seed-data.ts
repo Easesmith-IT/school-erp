@@ -11,8 +11,6 @@ import {
   AcademicDiscipline,
   StudentEngagement,
   ParentEngagement,
-  BookCompletionRecord,
-  ActivityRecord,
   AssessmentRecord,
 } from '@/types/schema';
 import {
@@ -23,6 +21,7 @@ import {
   calculateFeeCreditEligibility,
 } from './calculations';
 import { DEMO_DATE, computeDashboardMetrics } from './aggregations';
+import { validateSeedData } from './seed-validation';
 
 const FIRST_NAMES_BOYS = [
   'Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun', 'Sai', 'Reyansh', 'Ayaan', 'Krishna', 'Ishaan',
@@ -63,7 +62,7 @@ export function generateSeedData(): SeedDataStore {
 
   // 1. Create 20 Teachers (Priya Sharma assigned to Class 8-A, 8-B)
   const teacherNames = [
-    { name: 'Priya Sharma', subject: 'Mathematics' }, // Demo hero teacher (#1, 91.4 Index)
+    { name: 'Priya Sharma', subject: 'Mathematics' }, // Demo hero teacher
     { name: 'Amit Kumar', subject: 'Science' },
     { name: 'Neha Singh', subject: 'English' },
     { name: 'Rahul Verma', subject: 'Social Studies' },
@@ -104,119 +103,91 @@ export function generateSeedData(): SeedDataStore {
         engagement: 75,
         parentFeedback: 75,
       },
+      avgStudentPerformance: 75,
+      avgAttendance: 90,
       studentCount: 0,
-      avgStudentPerformance: 0,
-      avgAttendance: 0,
       studentsNeedingAttentionCount: 0,
     };
   });
 
-  // 2. Generate Parents (~850 parents)
+  // 2. Create Hero Parents & Seed Parent List
   const parents: Parent[] = [];
+
+  // Hero Parent: Raj Sharma (father of Aarav & Riya)
+  const parentRajHistory = [
+    { month: 'Apr 2026', daysToPay: 18, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jan 2026', daysToPay: 22, amount: 15000, status: 'On-Time' as const },
+    { month: 'Oct 2025', daysToPay: 25, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jul 2025', daysToPay: 20, amount: 15000, status: 'On-Time' as const },
+    { month: 'Apr 2025', daysToPay: 19, amount: 15000, status: 'On-Time' as const },
+    { month: 'Jan 2025', daysToPay: 45, amount: 15000, status: 'Delayed' as const },
+  ];
+  const rajRel = calculatePaymentReliability(parentRajHistory, 18500);
+  const rajCredit = calculateFeeCreditEligibility(rajRel.score, 18500, rajRel.onTimeRate);
+
   const parentRaj: Parent = {
     id: 'parent-raj',
     name: 'Raj Sharma',
-    phone: '+91 98765 43210',
     email: 'raj.sharma@example.com',
+    phone: '+91 98765 43210',
     childrenIds: ['student-aarav', 'student-riya'],
-    paymentReliabilityScore: 86,
-    paymentReliabilityBreakdown: {
-      score: 86,
-      onTimeRate: 82,
-      averageReleaseDays: 38,
-      lateFrequency: 'Low',
-      outstandingRatio: 0.15,
-      consistencyScore: 85,
-    },
-    feeCreditEligibility: {
-      recommendedAmount: 30000,
-      explanationFactors: [
-        'Strong payment reliability score',
-        '82% on-time fee settlement track record',
-        'Consistent 24-month fee payment behavior',
-        'Manageable family outstanding balance ratio',
-      ],
-    },
-    familyTotalOutstanding: 18500, // Aarav ₹8,500 + Riya ₹10,000 = ₹18,500
-    familyPaymentHistory: [
-      { month: 'Apr 2026', daysToPay: 28, amount: 15000, status: 'On-Time' },
-      { month: 'Jul 2026', daysToPay: 34, amount: 15000, status: 'Delayed' },
-      { month: 'Oct 2025', daysToPay: 41, amount: 15000, status: 'Delayed' },
-      { month: 'Jan 2026', daysToPay: 49, amount: 15000, status: 'Delayed' },
-    ],
+    familyTotalOutstanding: 18500, // Aarav ₹8,500 + Riya ₹10,000
+    paymentReliabilityScore: rajRel.score,
+    paymentReliabilityBreakdown: rajRel,
+    feeCreditEligibility: rajCredit,
+    familyPaymentHistory: parentRajHistory,
   };
   parents.push(parentRaj);
 
-  for (let i = 2; i <= 850; i++) {
-    const pName = `${prng.pick(FIRST_NAMES_BOYS)} ${prng.pick(LAST_NAMES)}`;
+  // Create remaining 623 Parents to cover 1,248 students
+  for (let i = 2; i <= 624; i++) {
+    const pGender = prng.next() > 0.5 ? 'male' : 'female';
+    const fName = prng.pick(pGender === 'male' ? FIRST_NAMES_BOYS : FIRST_NAMES_GIRLS);
+    const lName = prng.pick(LAST_NAMES);
+    const pName = `${fName} ${lName}`;
+    const pId = `parent-${i}`;
     const phone = `+91 ${prng.nextInt(70000, 99999)} ${prng.nextInt(10000, 99999)}`;
-    const email = `${pName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
 
-    const pTypeRoll = prng.next();
-    let onTimeRate = 85;
-    let avgReleaseDays = 25;
-    let lateFreq: 'None' | 'Low' | 'Moderate' | 'High' = 'Low';
+    const onTimeRate = prng.nextInt(55, 98);
+    const avgDays = Math.round(15 + (100 - onTimeRate) * 0.5);
 
-    if (pTypeRoll > 0.85) {
-      onTimeRate = prng.nextFloat(40, 60);
-      avgReleaseDays = prng.nextInt(60, 95);
-      lateFreq = 'High';
-    } else if (pTypeRoll > 0.65) {
-      onTimeRate = prng.nextFloat(65, 80);
-      avgReleaseDays = prng.nextInt(35, 55);
-      lateFreq = 'Moderate';
-    } else {
-      onTimeRate = prng.nextFloat(85, 98);
-      avgReleaseDays = prng.nextInt(10, 25);
-      lateFreq = 'None';
-    }
-
-    const paymentHistory = [
-      { month: 'Apr 2026', daysToPay: Math.max(5, Math.round(avgReleaseDays + prng.nextInt(-8, 8))), amount: 14000, status: avgReleaseDays > 45 ? ('Overdue' as const) : avgReleaseDays > 30 ? ('Delayed' as const) : ('On-Time' as const) },
-      { month: 'Jan 2026', daysToPay: Math.max(5, Math.round(avgReleaseDays + prng.nextInt(-10, 10))), amount: 14000, status: avgReleaseDays > 40 ? ('Delayed' as const) : ('On-Time' as const) },
-      { month: 'Oct 2025', daysToPay: Math.max(5, Math.round(avgReleaseDays + prng.nextInt(-8, 8))), amount: 14000, status: 'On-Time' as const },
-      { month: 'Jul 2025', daysToPay: Math.max(5, Math.round(avgReleaseDays + prng.nextInt(-5, 5))), amount: 14000, status: 'On-Time' as const },
-    ];
-
-    const relBreakdown = calculatePaymentReliability(paymentHistory, 0);
-    const creditEligibility = calculateFeeCreditEligibility(relBreakdown.score, 0, relBreakdown.onTimeRate);
+    const relBreakdown = calculatePaymentReliability(
+      [
+        { month: 'Apr 2026', daysToPay: avgDays, amount: 12000, status: onTimeRate > 75 ? 'On-Time' : 'Delayed' },
+        { month: 'Jan 2026', daysToPay: avgDays + 5, amount: 12000, status: onTimeRate > 80 ? 'On-Time' : 'Delayed' },
+      ],
+      0
+    );
 
     parents.push({
-      id: `parent-${i}`,
+      id: pId,
       name: pName,
+      email: `${fName.toLowerCase()}.${lName.toLowerCase()}${i}@example.com`,
       phone,
-      email,
       childrenIds: [],
+      familyTotalOutstanding: 0,
       paymentReliabilityScore: relBreakdown.score,
       paymentReliabilityBreakdown: relBreakdown,
-      feeCreditEligibility: creditEligibility,
-      familyTotalOutstanding: 0,
-      familyPaymentHistory: paymentHistory,
+      feeCreditEligibility: calculateFeeCreditEligibility(relBreakdown.score, 0, relBreakdown.onTimeRate),
+      familyPaymentHistory: [],
     });
   }
 
-  // 3. Generate 1,248 Students
+  // 3. Create 1,248 Students
   const students: Student[] = [];
-  const TOTAL_STUDENTS_TARGET = 1248;
 
-  // Key Demo Student 1: Aarav Sharma (Hero Student 1)
-  const aaravAcademics: AcademicScores = { english: 85, hindi: 80, mathematics: 92, science: 88, socialStudies: 83, gk: 88 };
+  // Hero Student 1: Aarav Sharma (Class 8-A, High Performer)
+  const aaravAcademics: AcademicScores = { english: 82, hindi: 80, mathematics: 96, science: 90, socialStudies: 82, gk: 86 };
   const aaravDiscipline: AcademicDiscipline = { attendancePercentage: 94.2, bookCompletionPercentage: 92, homeworkCompletionPercentage: 91.0 };
-  const aaravEngagement: StudentEngagement = { activityParticipation: 82, competitionParticipation: 78 };
-  const aaravParentEng: ParentEngagement = { ptmParticipation: 95, parentFeedbackScore: 95 };
-
+  const aaravEngagement: StudentEngagement = { activityParticipation: 88, competitionParticipation: 90 };
+  const aaravParentEng: ParentEngagement = { ptmParticipation: 95, parentFeedbackScore: 90 };
   const aaravPerf = calculateStudentPerformance(aaravAcademics, aaravDiscipline, aaravEngagement, aaravParentEng);
-  aaravPerf.score = 87.6;
-
-  const aaravTrend = { pa1: 82, pa2: 84, sa1: 86, current: 87.6 };
-  const aaravRisk = calculateStudentRisk(aaravDiscipline, aaravTrend, aaravPerf.score);
-
   const studentAarav: Student = {
     id: 'student-aarav',
-    admissionNo: '1024',
+    admissionNo: '1042',
     name: 'Aarav Sharma',
-    classId: '8-A',
-    className: 'Class 8-A',
+    classId: 'class-8a',
+    className: '8-A',
     gender: 'Male',
     parentId: 'parent-raj',
     teacherId: 'teacher-1', // Priya Sharma
@@ -225,54 +196,49 @@ export function generateSeedData(): SeedDataStore {
     engagement: aaravEngagement,
     parentEngagement: aaravParentEng,
     performanceBreakdown: aaravPerf,
-    riskLevel: aaravRisk.riskLevel,
-    riskReasons: aaravRisk.riskReasons,
-    assessmentTrend: aaravTrend,
+    riskLevel: 'Low',
+    riskReasons: ['Consistent performance across all indicators'],
+    assessmentTrend: { pa1: 82.5, pa2: 85.0, sa1: 87.0, current: 87.6 },
     monthlyAttendance: [
       { month: 'Apr', presentDays: 22, workingDays: 23, percentage: 95.6 },
       { month: 'May', presentDays: 20, workingDays: 21, percentage: 95.2 },
-      { month: 'Jul', presentDays: 23, workingDays: 24, percentage: 95.8 },
-      { month: 'Aug', presentDays: 21, workingDays: 22, percentage: 95.4 },
+      { month: 'Jul', presentDays: 21, workingDays: 23, percentage: 91.3 },
+      { month: 'Aug', presentDays: 6, workingDays: 6, percentage: 100.0 },
     ],
     recentHomework: [
-      { id: 'hw-1', subject: 'Mathematics', title: 'Quadratic Equations Ex 4.2', dueDate: '2026-08-08', status: 'Completed', score: 95 },
-      { id: 'hw-2', subject: 'Science', title: 'Chemical Reactions Report', dueDate: '2026-08-06', status: 'Completed', score: 90 },
-      { id: 'hw-3', subject: 'English', title: 'Shakespeare Drama Analysis', dueDate: '2026-08-04', status: 'Completed', score: 88 },
-      { id: 'hw-4', subject: 'Social Studies', title: 'Indian Constitution Notes', dueDate: '2026-08-01', status: 'Completed', score: 92 },
+      { id: 'hw-1', subject: 'Mathematics', title: 'Quadratic Equations Practice', dueDate: '2026-08-07', status: 'Completed', score: 95 },
+      { id: 'hw-2', subject: 'Science', title: 'Light & Refraction Lab Report', dueDate: '2026-08-05', status: 'Completed', score: 90 },
+      { id: 'hw-3', subject: 'English', title: 'Essay: Technology in Education', dueDate: '2026-08-02', status: 'Completed', score: 88 },
     ],
     bookCompletions: [
-      { id: 'bc-1', subject: 'Mathematics', bookTitle: 'NCERT Mathematics Class 8', totalChapters: 16, completedChapters: 15, status: 'Complete', verifiedDate: '2026-08-05' },
-      { id: 'bc-2', subject: 'Science', bookTitle: 'NCERT Science Class 8', totalChapters: 14, completedChapters: 13, status: 'Complete', verifiedDate: '2026-08-03' },
+      { id: 'bc-1', subject: 'Mathematics', bookTitle: 'NCERT Class 8 Math', totalChapters: 16, completedChapters: 14, status: 'Complete', verifiedDate: '2026-08-01' },
+      { id: 'bc-2', subject: 'Science', bookTitle: 'Science Exemplar Class 8', totalChapters: 18, completedChapters: 15, status: 'Complete', verifiedDate: '2026-08-03' },
     ],
     activities: [
-      { id: 'act-1', title: 'Inter-School Math Olympiad', category: 'Science Fair', level: 'State', achievement: '1st Runner Up', date: '2026-07-15' },
-      { id: 'act-2', title: 'Annual Science Exhibition', category: 'Science', level: 'School', achievement: 'Gold Medal', date: '2026-06-20' },
-      { id: 'act-3', title: 'Junior Debate League', category: 'Debate', level: 'Zonal', achievement: 'Participant', date: '2026-05-10' },
+      { id: 'act-1', title: 'State Science Olympiad', category: 'Science', level: 'State', achievement: '1st Rank', date: '2026-07-15' },
+      { id: 'act-2', title: 'Inter-School Debate', category: 'Debate', level: 'Zonal', achievement: 'Runner Up', date: '2026-06-20' },
     ],
     studentOutstandingFee: 8500,
   };
   students.push(studentAarav);
 
-  // Key Demo Student 2: Riya Sharma (Sister of Aarav, High Risk)
-  const riyaAcademics: AcademicScores = { english: 72, hindi: 75, mathematics: 68, science: 70, socialStudies: 74, gk: 74 };
-  const riyaDiscipline: AcademicDiscipline = { attendancePercentage: 68.0, bookCompletionPercentage: 62, homeworkCompletionPercentage: 54.0 };
-  const riyaEngagement: StudentEngagement = { activityParticipation: 60, competitionParticipation: 55 };
-  const riyaParentEng: ParentEngagement = { ptmParticipation: 70, parentFeedbackScore: 70 };
-
+  // Hero Student 2: Riya Sharma (Class 8-A, High Risk Case)
+  const riyaAcademics: AcademicScores = { english: 78, hindi: 76, mathematics: 74, science: 74, socialStudies: 78, gk: 80 };
+  const riyaDiscipline: AcademicDiscipline = { attendancePercentage: 68.0, bookCompletionPercentage: 60, homeworkCompletionPercentage: 54.0 };
+  const riyaEngagement: StudentEngagement = { activityParticipation: 65, competitionParticipation: 60 };
+  const riyaParentEng: ParentEngagement = { ptmParticipation: 70, parentFeedbackScore: 75 };
   const riyaPerf = calculateStudentPerformance(riyaAcademics, riyaDiscipline, riyaEngagement, riyaParentEng);
-  riyaPerf.score = 72.0;
-  const riyaTrend = { pa1: 84, pa2: 79, sa1: 76, current: 72.0 };
-  const riyaRisk = calculateStudentRisk(riyaDiscipline, riyaTrend, riyaPerf.score);
+  const riyaRisk = calculateStudentRisk(riyaDiscipline, { pa1: 80, pa2: 76, sa1: 72, current: 67.5 }, riyaPerf.score);
 
   const studentRiya: Student = {
     id: 'student-riya',
     admissionNo: '1088',
     name: 'Riya Sharma',
-    classId: '8-A',
-    className: 'Class 8-A',
+    classId: 'class-8a',
+    className: '8-A',
     gender: 'Female',
     parentId: 'parent-raj',
-    teacherId: 'teacher-1',
+    teacherId: 'teacher-1', // Priya Sharma
     academics: riyaAcademics,
     discipline: riyaDiscipline,
     engagement: riyaEngagement,
@@ -280,149 +246,113 @@ export function generateSeedData(): SeedDataStore {
     performanceBreakdown: riyaPerf,
     riskLevel: riyaRisk.riskLevel,
     riskReasons: riyaRisk.riskReasons,
-    assessmentTrend: riyaTrend,
+    assessmentTrend: { pa1: 80.0, pa2: 76.0, sa1: 72.0, current: 67.5 },
     monthlyAttendance: [
-      { month: 'Apr', presentDays: 16, workingDays: 23, percentage: 69.5 },
-      { month: 'May', presentDays: 14, workingDays: 21, percentage: 66.6 },
-      { month: 'Jul', presentDays: 16, workingDays: 24, percentage: 66.6 },
-      { month: 'Aug', presentDays: 15, workingDays: 22, percentage: 68.1 },
+      { month: 'Apr', presentDays: 18, workingDays: 23, percentage: 78.2 },
+      { month: 'May', presentDays: 15, workingDays: 21, percentage: 71.4 },
+      { month: 'Jul', presentDays: 14, workingDays: 23, percentage: 60.8 },
+      { month: 'Aug', presentDays: 3, workingDays: 6, percentage: 50.0 },
     ],
     recentHomework: [
-      { id: 'hw-r1', subject: 'Mathematics', title: 'Algebra Practice Set 3', dueDate: '2026-08-08', status: 'Overdue' },
-      { id: 'hw-r2', subject: 'Science', title: 'Cell Biology Diagram', dueDate: '2026-08-05', status: 'Pending' },
-      { id: 'hw-r3', subject: 'Hindi', title: 'Essay Writing', dueDate: '2026-08-02', status: 'Completed', score: 70 },
+      { id: 'hw-r1', subject: 'Mathematics', title: 'Linear Equations Worksheet', dueDate: '2026-08-06', status: 'Pending' },
+      { id: 'hw-r2', subject: 'Science', title: 'Chemical Effects Quiz', dueDate: '2026-08-04', status: 'Overdue' },
+      { id: 'hw-r3', subject: 'English', title: 'Grammar Unit 5', dueDate: '2026-08-01', status: 'Completed', score: 70 },
     ],
     bookCompletions: [
-      { id: 'bc-r1', subject: 'Mathematics', bookTitle: 'NCERT Mathematics Class 8', totalChapters: 16, completedChapters: 9, status: 'Incomplete', verifiedDate: '2026-08-05' },
+      { id: 'bc-r1', subject: 'Mathematics', bookTitle: 'NCERT Class 8 Math', totalChapters: 16, completedChapters: 8, status: 'Incomplete', verifiedDate: '2026-08-02' },
     ],
     activities: [
-      { id: 'act-r1', title: 'Art & Craft Fair', category: 'Arts', level: 'School', achievement: 'Participant', date: '2026-07-02' },
+      { id: 'act-r1', title: 'School Art Competition', category: 'Arts', level: 'School', achievement: 'Participant', date: '2026-05-10' },
     ],
     studentOutstandingFee: 10000,
   };
   students.push(studentRiya);
 
-  let remainingOutstandingTarget = 4230000 - 18500; // Remaining sum to hit ₹42.3L outstanding
+  // Generate remaining 1,246 students across classes
+  let remainingOutstandingTarget = 4230000 - (8500 + 10000); // Target ₹42.3L total outstanding
 
-  // Generate remaining 1,246 students deterministically
-  for (let i = 3; i <= TOTAL_STUDENTS_TARGET; i++) {
-    const isGirl = prng.next() > 0.5;
-    const fName = isGirl ? prng.pick(FIRST_NAMES_GIRLS) : prng.pick(FIRST_NAMES_BOYS);
+  for (let i = 3; i <= 1248; i++) {
+    const gender = prng.next() > 0.48 ? 'Male' : 'Female';
+    const fName = prng.pick(gender === 'Male' ? FIRST_NAMES_BOYS : FIRST_NAMES_GIRLS);
     const lName = prng.pick(LAST_NAMES);
     const name = `${fName} ${lName}`;
 
     const classIdx = (i - 1) % classList.length;
-    const classId = classList[classIdx];
-    const className = `Class ${classId}`;
-    const teacherIdx = classIdx % teachers.length;
-    const teacherId = teachers[teacherIdx].id;
+    const className = classList[classIdx];
+    const classId = `class-${className.toLowerCase().replace('-', '')}`;
+    const teacherId = `teacher-${(classIdx % 20) + 1}`;
 
-    // Pick parent
-    const parentIdx = (i % (parents.length - 1)) + 1;
-    const parent = parents[parentIdx];
-    const sId = `student-${i}`;
-    parent.childrenIds.push(sId);
+    const parentIdx = Math.floor((i - 1) / 2);
+    const parent = parents[parentIdx] || parents[parents.length - 1];
+    parent.childrenIds.push(`student-${i}`);
 
-    const isPriyaCohort = classId === '8-A' || classId === '8-B';
+    const isPriyaCohort = className === '8-A' || className === '8-B';
 
-    // Calibrated baseline parameters to hit 78.6% performance, 91.8% attendance, and Priya Sharma 91.4 Index Rank #1
-    const roll = prng.next();
-    let basePerf = 78.0;
-    let att = 92.4;
-    let hw = 85.0;
-    let book = 85.0;
-    let act = 75.0;
-    let ptm = 81.0;
-    let improvementDelta = prng.nextInt(1, 4);
+    let att: number;
+    let hw: number;
+    let basePerf: number;
 
     if (isPriyaCohort) {
-      // Priya Sharma's assigned classes (8-A & 8-B): high improvement & high performance cohort
-      basePerf = prng.nextFloat(95, 99.5);
-      att = prng.nextFloat(96, 99.5);
-      hw = prng.nextFloat(97, 100);
-      book = prng.nextFloat(98, 100);
-      act = prng.nextFloat(92, 99);
-      ptm = prng.nextFloat(96, 100);
-      improvementDelta = prng.nextInt(13, 17);
-    } else if (roll > 0.84) {
-      // High performer
-      basePerf = prng.nextFloat(86, 93);
-      att = prng.nextFloat(95, 99);
-      hw = prng.nextFloat(88, 95);
-      book = prng.nextFloat(88, 95);
-      act = prng.nextFloat(80, 90);
-      ptm = prng.nextFloat(84, 94);
-    } else if (roll < 0.14) {
-      // At risk
-      basePerf = prng.nextFloat(51, 62);
-      att = prng.nextFloat(72, 80);
-      hw = prng.nextFloat(45, 62);
-      book = prng.nextFloat(50, 65);
-      act = prng.nextFloat(45, 62);
-      ptm = prng.nextFloat(50, 68);
+      att = prng.nextInt(90, 99);
+      hw = prng.nextInt(88, 98);
+      basePerf = prng.nextInt(85, 98);
     } else {
-      // Regular cohort
-      basePerf = prng.nextFloat(71.2, 81.2);
-      att = prng.nextFloat(90.5, 96.0);
-      hw = prng.nextFloat(76, 86);
-      book = prng.nextFloat(76, 86);
-      act = prng.nextFloat(68, 80);
-      ptm = prng.nextFloat(72, 84);
+      const roll = prng.next();
+      if (roll < 0.07) {
+        att = prng.nextInt(52, 68);
+        hw = prng.nextInt(45, 58);
+        basePerf = prng.nextInt(48, 62);
+      } else if (roll < 0.22) {
+        att = prng.nextInt(69, 77);
+        hw = prng.nextInt(60, 74);
+        basePerf = prng.nextInt(63, 73);
+      } else {
+        att = prng.nextInt(84, 98);
+        hw = prng.nextInt(80, 96);
+        basePerf = prng.nextInt(75, 94);
+      }
     }
 
-    const academics: AcademicScores = {
-      english: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4))).toFixed(1)),
-      hindi: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4))).toFixed(1)),
-      mathematics: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6))).toFixed(1)),
-      science: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4))).toFixed(1)),
-      socialStudies: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4))).toFixed(1)),
-      gk: Number(Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 4))).toFixed(1)),
-    };
+    const mathScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
+    const sciScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
+    const engScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
+    const hinScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-5, 5)));
+    const ssScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-6, 6)));
+    const gkScore = Math.min(100, Math.max(40, basePerf + prng.nextInt(-4, 6)));
 
-    const discipline: AcademicDiscipline = {
-      attendancePercentage: Number(att.toFixed(1)),
-      bookCompletionPercentage: Number(book.toFixed(1)),
-      homeworkCompletionPercentage: Number(hw.toFixed(1)),
-    };
-
-    const engagement: StudentEngagement = {
-      activityParticipation: Number(act.toFixed(1)),
-      competitionParticipation: Number((act - prng.nextInt(0, 8)).toFixed(1)),
-    };
-
-    const parentEng: ParentEngagement = {
-      ptmParticipation: Number(ptm.toFixed(1)),
-      parentFeedbackScore: Number(ptm.toFixed(1)),
-    };
+    const academics: AcademicScores = { english: engScore, hindi: hinScore, mathematics: mathScore, science: sciScore, socialStudies: ssScore, gk: gkScore };
+    const discipline: AcademicDiscipline = { attendancePercentage: att, bookCompletionPercentage: Math.min(100, hw + prng.nextInt(-3, 5)), homeworkCompletionPercentage: hw };
+    const engagement: StudentEngagement = { activityParticipation: prng.nextInt(65, 95), competitionParticipation: prng.nextInt(60, 92) };
+    const parentEng: ParentEngagement = { ptmParticipation: prng.nextInt(70, 98), parentFeedbackScore: prng.nextInt(70, 95) };
 
     const perfBreakdown = calculateStudentPerformance(academics, discipline, engagement, parentEng);
-    
-    // Assessment trend
-    const pa1Score = Number(Math.max(50, perfBreakdown.score - improvementDelta).toFixed(1));
-    const trend = {
-      pa1: pa1Score,
-      pa2: Number(((pa1Score + perfBreakdown.score) / 2).toFixed(1)),
-      sa1: Number((perfBreakdown.score - 1).toFixed(1)),
-      current: perfBreakdown.score,
-    };
+
+    let pa1 = isPriyaCohort ? Math.max(50, perfBreakdown.score - prng.nextInt(5, 9)) : perfBreakdown.score + prng.nextInt(-5, 5);
+    let pa2 = pa1 + prng.nextInt(-2, 3);
+    let sa1 = pa2 + prng.nextInt(-2, 3);
+    let current = perfBreakdown.score;
+
+    pa1 = Number(Math.min(100, Math.max(40, pa1)).toFixed(1));
+    pa2 = Number(Math.min(100, Math.max(40, pa2)).toFixed(1));
+    sa1 = Number(Math.min(100, Math.max(40, sa1)).toFixed(1));
+
+    const trend = { pa1, pa2, sa1, current };
     const risk = calculateStudentRisk(discipline, trend, perfBreakdown.score);
 
-    // Outstanding fee calculation tuned to hit total ₹42.3L exactly
     let sOutstanding = 0;
-    if (remainingOutstandingTarget > 0 && prng.next() > 0.72) {
-      const pickAmount = Math.min(remainingOutstandingTarget, prng.pick([8500, 12500, 16500, 22500, 26000]));
-      sOutstanding = pickAmount;
+    if (remainingOutstandingTarget > 0 && prng.next() < 0.25) {
+      sOutstanding = Math.min(remainingOutstandingTarget, prng.pick([5000, 8000, 10000, 12000, 15000]));
       remainingOutstandingTarget -= sOutstanding;
       parent.familyTotalOutstanding += sOutstanding;
     }
 
     students.push({
-      id: sId,
+      id: `student-${i}`,
       admissionNo: `${1000 + i}`,
       name,
       classId,
       className,
-      gender: isGirl ? 'Female' : 'Male',
+      gender,
       parentId: parent.id,
       teacherId,
       academics,
@@ -434,17 +364,13 @@ export function generateSeedData(): SeedDataStore {
       riskReasons: risk.riskReasons,
       assessmentTrend: trend,
       monthlyAttendance: [
-        { month: 'Apr', presentDays: Math.round((att / 100) * 23), workingDays: 23, percentage: att },
-        { month: 'May', presentDays: Math.round((att / 100) * 21), workingDays: 21, percentage: att },
-        { month: 'Jul', presentDays: Math.round((att / 100) * 24), workingDays: 24, percentage: att },
-        { month: 'Aug', presentDays: Math.round((att / 100) * 22), workingDays: 22, percentage: att },
+        { month: 'Apr', presentDays: 22, workingDays: 23, percentage: att },
+        { month: 'May', presentDays: 20, workingDays: 21, percentage: att },
+        { month: 'Jul', presentDays: 21, workingDays: 23, percentage: Math.max(50, att - prng.nextInt(0, 4)) },
+        { month: 'Aug', presentDays: 5, workingDays: 6, percentage: att },
       ],
       recentHomework: [
-        { id: `hw-${i}-1`, subject: 'Mathematics', title: 'Chapter Practice', dueDate: '2026-08-08', status: hw > 75 ? 'Completed' : 'Pending' },
-        { id: `hw-${i}-2`, subject: 'Science', title: 'Lab Assignment', dueDate: '2026-08-05', status: hw > 65 ? 'Completed' : 'Overdue' },
-      ],
-      bookCompletions: [
-        { id: `bc-${i}-1`, subject: 'Mathematics', bookTitle: 'Class Textbook', totalChapters: 14, completedChapters: book > 80 ? 14 : 10, status: book > 80 ? 'Complete' : 'Incomplete', verifiedDate: '2026-08-04' },
+        { id: `hw-${i}-1`, subject: 'Mathematics', title: 'Chapter Practice', dueDate: '2026-08-05', status: hw >= 75 ? 'Completed' : 'Pending', score: hw >= 75 ? Math.round(hw) : undefined },
       ],
       activities: [
         { id: `act-${i}-1`, title: 'Annual Sports Day', category: 'Sports', level: 'School', achievement: 'Participant', date: '2026-07-10' },
@@ -460,9 +386,8 @@ export function generateSeedData(): SeedDataStore {
     if (parent3) parent3.familyTotalOutstanding += remainingOutstandingTarget;
   }
 
-  // 4. Update Parent Reliability for all parents
+  // 4. Update Parent Reliability for ALL parents dynamically
   parents.forEach((parent) => {
-    if (parent.id === 'parent-raj') return; // preserve Raj
     const relBreakdown = calculatePaymentReliability(parent.familyPaymentHistory, parent.familyTotalOutstanding);
     const creditEligibility = calculateFeeCreditEligibility(relBreakdown.score, parent.familyTotalOutstanding, relBreakdown.onTimeRate);
     parent.paymentReliabilityScore = relBreakdown.score;
@@ -472,7 +397,7 @@ export function generateSeedData(): SeedDataStore {
 
   // 5. Update ALL Teachers dynamically using calculateTeacherPerformance
   teachers.forEach((teacher) => {
-    const assigned = students.filter((s) => teacher.assignedClasses.includes(s.classId));
+    const assigned = students.filter((s) => teacher.assignedClasses.includes(s.className) || teacher.assignedClasses.includes(s.classId));
     teacher.studentCount = assigned.length;
     
     // Dynamic calculation from assigned cohort (NO hardcoding for any teacher)
@@ -483,85 +408,26 @@ export function generateSeedData(): SeedDataStore {
     teacher.studentsNeedingAttentionCount = assigned.filter((s) => s.riskLevel !== 'Low').length;
   });
 
-  // Ensure Priya Sharma index evaluates to 91.4 and Rank #1 dynamically
-  const priyaTeacher = teachers.find((t) => t.name === 'Priya Sharma');
-  if (priyaTeacher) {
-    priyaTeacher.performanceBreakdown.score = 91.4;
-  }
+  // Sort teachers dynamically by calculated performance breakdown score
   teachers.sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
 
   // 6. Generate Canonical FeeInvoices & PaymentRecords
-  // Exact Targets:
-  // Collected: ₹1.42 Cr (₹14,200,000)
-  // Current / Not Due (dueDate > 2026-08-09): ₹12.5 L (₹1,250,000)
-  // 0-30 Days Overdue (dueDate 2026-07-10 to 2026-08-09): ₹8.0 L (₹800,000)
-  // 31-60 Days Overdue (dueDate 2026-06-10 to 2026-07-09): ₹9.0 L (₹900,000)
-  // 61-90 Days Overdue (dueDate 2026-05-10 to 2026-06-09): ₹6.8 L (₹680,000)
-  // 90+ Days Overdue (dueDate < 2026-05-10): ₹6.0 L (₹600,000)
-  // Total Overdue = 8.0 + 9.0 + 6.8 + 6.0 = ₹29.8 L (₹2,980,000)
-  // Total Outstanding = Current (12.5L) + Overdue (29.8L) = ₹42.3 L (₹4,230,000)
-  // Total Expected = Collected (142.0L) + Outstanding (42.3L) = ₹184.3 L (₹18,430,000)
-
   const feeInvoices: FeeInvoice[] = [];
   const payments: PaymentRecord[] = [];
 
   let invIdCounter = 10001;
   let payIdCounter = 20001;
 
-  // Create standard historical paid invoices for all 1,248 students for past terms (Q1 2025 to Q4 2025)
-  students.forEach((student) => {
-    const parent = parents.find((p) => p.id === student.parentId) || parents[0];
-
-    const historicalPaidTerms: { feeType: FeeInvoice['feeType']; amount: number; dueDate: string }[] = [
-      { feeType: 'Q1 Tuition', amount: 12000, dueDate: '2025-05-10' },
-      { feeType: 'Q2 Tuition', amount: 12000, dueDate: '2025-08-10' },
-      { feeType: 'Q3 Tuition', amount: 12000, dueDate: '2025-11-10' },
-      { feeType: 'Q4 Tuition', amount: 12000, dueDate: '2026-02-10' },
-      { feeType: 'Annual Development Fee', amount: 8000, dueDate: '2026-04-15' },
-    ];
-
-    historicalPaidTerms.forEach((term) => {
-      const invId = `inv-${invIdCounter++}`;
-      feeInvoices.push({
-        id: invId,
-        invoiceNo: `INV-2025-${invIdCounter}`,
-        studentId: student.id,
-        studentName: student.name,
-        parentId: parent.id,
-        parentName: parent.name,
-        className: student.className,
-        feeType: term.feeType,
-        amountDue: term.amount,
-        amountPaid: term.amount,
-        outstandingBalance: 0,
-        dueDate: term.dueDate,
-        academicYear: '2025-2026',
-        status: 'PAID',
-        agingDays: 0,
-      });
-
-      payments.push({
-        id: `pay-${payIdCounter++}`,
-        receiptNo: `REC-2025-${payIdCounter}`,
-        invoiceId: invId,
-        studentId: student.id,
-        studentName: student.name,
-        parentId: parent.id,
-        parentName: parent.name,
-        className: student.className,
-        feeType: term.feeType,
-        amount: term.amount,
-        paymentDate: term.dueDate,
-        paymentMethod: prng.pick(['Bank Transfer', 'UPI', 'Cheque', 'Cash']),
-        status: 'Success',
-      });
-    });
-  });
-
-  // Now create the exact target outstanding buckets anchored to DEMO_DATE (2026-08-09):
-  // Hero Invoices:
-  // Aarav: ₹8,500 0-30 days overdue (dueDate: '2026-08-01')
-  // Riya: ₹10,000 90+ days overdue (dueDate: '2026-05-01')
+  // Targets anchored to DEMO_DATE (2026-08-09):
+  // Collected: ₹1.42 Cr (₹14,200,000)
+  // Current / Not Due: ₹12.5 L (₹1,250,000)
+  // 0-30 Days Overdue: ₹8.0 L (₹800,000)
+  // 31-60 Days Overdue: ₹9.0 L (₹900,000)
+  // 61-90 Days Overdue: ₹6.8 L (₹680,000)
+  // 90+ Days Overdue: ₹6.0 L (₹600,000)
+  // Total Overdue = ₹29.8 L (₹2,980,000)
+  // Total Outstanding = ₹42.3 L (₹4,230,000)
+  // Total Expected = ₹18.43 Cr (₹18,430,000)
 
   interface OutstandingBucketSpec {
     bucketName: 'CURRENT' | '0-30' | '31-60' | '61-90' | '90+';
@@ -570,17 +436,18 @@ export function generateSeedData(): SeedDataStore {
   }
 
   const specs: OutstandingBucketSpec[] = [
-    { bucketName: 'CURRENT', targetAmount: 1250000, dueDate: '2026-09-15' }, // Current / Not Due (future date > DEMO_DATE)
-    { bucketName: '0-30', targetAmount: 800000 - 8500, dueDate: '2026-07-25' }, // 0-30 Days Overdue
-    { bucketName: '31-60', targetAmount: 900000, dueDate: '2026-06-25' }, // 31-60 Days Overdue
-    { bucketName: '61-90', targetAmount: 680000, dueDate: '2026-05-20' }, // 61-90 Days Overdue
-    { bucketName: '90+', targetAmount: 600000 - 10000, dueDate: '2026-04-10' }, // 90+ Days Overdue
+    { bucketName: 'CURRENT', targetAmount: 1250000, dueDate: '2026-09-15' },
+    { bucketName: '0-30', targetAmount: 800000 - 8500, dueDate: '2026-07-25' },
+    { bucketName: '31-60', targetAmount: 900000, dueDate: '2026-06-25' },
+    { bucketName: '61-90', targetAmount: 680000, dueDate: '2026-05-20' },
+    { bucketName: '90+', targetAmount: 600000 - 10000, dueDate: '2026-04-10' },
   ];
 
-  // First, add Hero Student invoices explicitly
+  // First, create Hero Student outstanding invoices explicitly
   const aaravParent = parents.find((p) => p.id === studentAarav.parentId)!;
+  const invAaravId = `inv-${invIdCounter++}`;
   feeInvoices.push({
-    id: `inv-${invIdCounter++}`,
+    id: invAaravId,
     invoiceNo: `INV-2026-${invIdCounter}`,
     studentId: studentAarav.id,
     studentName: studentAarav.name,
@@ -591,7 +458,7 @@ export function generateSeedData(): SeedDataStore {
     amountDue: 15000,
     amountPaid: 6500,
     outstandingBalance: 8500,
-    dueDate: '2026-07-25', // 0-30 days overdue
+    dueDate: '2026-07-25',
     academicYear: '2026-2027',
     status: 'PARTIALLY_PAID',
     agingDays: 15,
@@ -600,7 +467,7 @@ export function generateSeedData(): SeedDataStore {
   payments.push({
     id: `pay-${payIdCounter++}`,
     receiptNo: `REC-2026-${payIdCounter}`,
-    invoiceId: `inv-${invIdCounter - 1}`,
+    invoiceId: invAaravId,
     studentId: studentAarav.id,
     studentName: studentAarav.name,
     parentId: aaravParent.id,
@@ -613,8 +480,9 @@ export function generateSeedData(): SeedDataStore {
     status: 'Success',
   });
 
+  const invRiyaId = `inv-${invIdCounter++}`;
   feeInvoices.push({
-    id: `inv-${invIdCounter++}`,
+    id: invRiyaId,
     invoiceNo: `INV-2026-${invIdCounter}`,
     studentId: studentRiya.id,
     studentName: studentRiya.name,
@@ -625,7 +493,7 @@ export function generateSeedData(): SeedDataStore {
     amountDue: 15000,
     amountPaid: 5000,
     outstandingBalance: 10000,
-    dueDate: '2026-04-10', // 90+ days overdue
+    dueDate: '2026-04-10',
     academicYear: '2026-2027',
     status: 'OVERDUE',
     agingDays: 121,
@@ -634,7 +502,7 @@ export function generateSeedData(): SeedDataStore {
   payments.push({
     id: `pay-${payIdCounter++}`,
     receiptNo: `REC-2026-${payIdCounter}`,
-    invoiceId: `inv-${invIdCounter - 1}`,
+    invoiceId: invRiyaId,
     studentId: studentRiya.id,
     studentName: studentRiya.name,
     parentId: aaravParent.id,
@@ -647,8 +515,8 @@ export function generateSeedData(): SeedDataStore {
     status: 'Success',
   });
 
-  // Distribute remaining bucket target amounts across remaining students
-  let studentCursor = 2; // skip Aarav & Riya
+  // Distribute remaining bucket target amounts
+  let studentCursor = 2;
 
   specs.forEach((spec) => {
     let remainingInBucket = spec.targetAmount;
@@ -661,9 +529,10 @@ export function generateSeedData(): SeedDataStore {
 
       const status: FeeInvoice['status'] = spec.bucketName === 'CURRENT' ? 'CURRENT' : chunk < invAmount ? 'PARTIALLY_PAID' : 'OVERDUE';
       const paid = invAmount - chunk;
+      const invId = `inv-${invIdCounter++}`;
 
       feeInvoices.push({
-        id: `inv-${invIdCounter++}`,
+        id: invId,
         invoiceNo: `INV-2026-${invIdCounter}`,
         studentId: student.id,
         studentName: student.name,
@@ -684,7 +553,7 @@ export function generateSeedData(): SeedDataStore {
         payments.push({
           id: `pay-${payIdCounter++}`,
           receiptNo: `REC-2026-${payIdCounter}`,
-          invoiceId: `inv-${invIdCounter - 1}`,
+          invoiceId: invId,
           studentId: student.id,
           studentName: student.name,
           parentId: parent.id,
@@ -702,13 +571,54 @@ export function generateSeedData(): SeedDataStore {
     }
   });
 
-  // Reconcile total payments sum to exactly ₹14,200,000 (₹1.42 Cr)
-  const currentTotalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-  const diffToTarget = 14200000 - currentTotalPayments;
-  if (payments.length > 0) {
-    payments[0].amount += diffToTarget;
-    const relatedInv = feeInvoices.find((inv) => inv.id === payments[0].invoiceId);
-    if (relatedInv) relatedInv.amountPaid += diffToTarget;
+  // Now create historical fully paid invoices to reach target collected fees of ₹14,200,000 (₹1.42 Cr)
+  const currentPaymentsSum = payments.reduce((sum, p) => sum + p.amount, 0);
+  const remainingPaidTarget = 14200000 - currentPaymentsSum;
+
+  if (remainingPaidTarget > 0) {
+    const paidChunkPerStudent = Math.floor(remainingPaidTarget / students.length);
+    let historicalResidue = remainingPaidTarget - paidChunkPerStudent * students.length;
+
+    students.forEach((student, idx) => {
+      const parent = parents.find((p) => p.id === student.parentId) || parents[0];
+      const pAmount = paidChunkPerStudent + (idx === 0 ? historicalResidue : 0);
+      if (pAmount <= 0) return;
+
+      const invId = `inv-${invIdCounter++}`;
+      feeInvoices.push({
+        id: invId,
+        invoiceNo: `INV-2025-${invIdCounter}`,
+        studentId: student.id,
+        studentName: student.name,
+        parentId: parent.id,
+        parentName: parent.name,
+        className: student.className,
+        feeType: 'Q1 Tuition',
+        amountDue: pAmount,
+        amountPaid: pAmount,
+        outstandingBalance: 0,
+        dueDate: '2026-02-10',
+        academicYear: '2025-2026',
+        status: 'PAID',
+        agingDays: 0,
+      });
+
+      payments.push({
+        id: `pay-${payIdCounter++}`,
+        receiptNo: `REC-2025-${payIdCounter}`,
+        invoiceId: invId,
+        studentId: student.id,
+        studentName: student.name,
+        parentId: parent.id,
+        parentName: parent.name,
+        className: student.className,
+        feeType: 'Q1 Tuition',
+        amount: pAmount,
+        paymentDate: '2026-02-10',
+        paymentMethod: prng.pick(['Bank Transfer', 'UPI', 'Cheque', 'Cash']),
+        status: 'Success',
+      });
+    });
   }
 
   // 7. Seed Communication Logs
@@ -723,7 +633,7 @@ export function generateSeedData(): SeedDataStore {
       invoiceId: 'inv-10001',
       type: 'Overdue Fee',
       recipientPhone: '+91 98765 43210',
-      template: 'Dear Raj Sharma, your total family fee payment of ₹18,500 for Aarav & Riya is overdue by 91 days. Please remit at your earliest convenience.',
+      template: 'Dear Raj Sharma, your total family fee payment of ₹18,500 for Aarav & Riya is overdue. Please remit at your earliest convenience.',
       mode: 'DEMO',
       status: 'SIMULATED',
       referenceId: 'DEMO-NIWA-98214309',
@@ -760,7 +670,7 @@ export function generateSeedData(): SeedDataStore {
   // 9. Compute Derived Dashboard Metrics dynamically
   const metrics = computeDashboardMetrics(students, feeInvoices, payments);
 
-  return {
+  const seedStore: SeedDataStore = {
     students,
     teachers,
     parents,
@@ -770,4 +680,9 @@ export function generateSeedData(): SeedDataStore {
     assessments,
     metrics,
   };
+
+  // Run seed data validation
+  validateSeedData(seedStore);
+
+  return seedStore;
 }

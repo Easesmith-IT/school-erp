@@ -1,7 +1,4 @@
-/**
- * Global Entity Context Navigation Helper
- * Handles mapping of `?from=` entity query parameters into human-readable context labels and routes.
- */
+import { store } from './store';
 
 export interface NavContext {
   id: string;
@@ -15,29 +12,35 @@ export function parseEntityContext(fromParam: string | null): NavContext | null 
 
   if (fromParam.startsWith('student-')) {
     const studentId = fromParam;
-    if (studentId === 'student-riya') {
-      return { id: studentId, name: 'Riya Sharma', type: 'Student', backRoute: '/students/student-riya' };
-    }
-    if (studentId === 'student-aarav') {
-      return { id: studentId, name: 'Aarav Sharma', type: 'Student', backRoute: '/students/student-aarav' };
-    }
-    return { id: studentId, name: 'Student Profile', type: 'Student', backRoute: `/students/${studentId}` };
+    const student = store.getStudentById(studentId);
+    return {
+      id: studentId,
+      name: student ? student.name : 'Student Profile',
+      type: 'Student',
+      backRoute: `/students/${studentId}`,
+    };
   }
 
   if (fromParam.startsWith('parent-')) {
     const parentId = fromParam;
-    if (parentId === 'parent-raj') {
-      return { id: parentId, name: 'Raj Sharma', type: 'Parent', backRoute: '/parents/parent-raj' };
-    }
-    return { id: parentId, name: 'Parent Profile', type: 'Parent', backRoute: `/parents/${parentId}` };
+    const parent = store.getParentById(parentId);
+    return {
+      id: parentId,
+      name: parent ? parent.name : 'Parent Profile',
+      type: 'Parent',
+      backRoute: `/parents/${parentId}`,
+    };
   }
 
   if (fromParam.startsWith('teacher-')) {
     const teacherId = fromParam;
-    if (teacherId === 'teacher-1') {
-      return { id: teacherId, name: 'Priya Sharma', type: 'Teacher', backRoute: '/teachers/teacher-1' };
-    }
-    return { id: teacherId, name: 'Teacher Profile', type: 'Teacher', backRoute: `/teachers/${teacherId}` };
+    const teacher = store.getTeacherById(teacherId);
+    return {
+      id: teacherId,
+      name: teacher ? teacher.name : 'Teacher Profile',
+      type: 'Teacher',
+      backRoute: `/teachers/${teacherId}`,
+    };
   }
 
   if (fromParam.startsWith('class-')) {

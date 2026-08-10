@@ -23,6 +23,12 @@ export default function TeacherDetailPage() {
 
   const perfBreakdown = useMemo(() => getTeacherPerformanceBreakdown(teacher), [teacher]);
   const cohortBreakdown = useMemo(() => getTeacherCohortBreakdown(teacher, students), [teacher, students]);
+  const cohortGrowth = cohortBreakdown.cohortGrowth;
+  const cohortGrowthSign = cohortGrowth >= 0 ? '+' : '';
+
+  const allTeachers = store.getTeachers();
+  const sortedTeachers = useMemo(() => [...allTeachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score), [allTeachers]);
+  const teacherRank = sortedTeachers.findIndex((t) => t.id === teacher.id) + 1;
 
   const assignedStudents = store.getStudents().filter((s) => teacher.assignedClasses.includes(s.className));
   const atRiskAssigned = assignedStudents.filter((s) => s.riskLevel !== 'Low');
@@ -43,10 +49,10 @@ export default function TeacherDetailPage() {
           </div>
         )}
 
-        {/* Navigation back */}
+        {/* Back Button */}
         <button
           onClick={() => router.push('/teachers')}
-          className="text-xs text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs"
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Teacher Directory
         </button>
@@ -61,7 +67,7 @@ export default function TeacherDetailPage() {
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-2xl font-bold text-white tracking-tight">{teacher.name}</h1>
                 <span className="px-2.5 py-0.5 bg-amber-400 text-amber-950 font-bold text-xs rounded-full">
-                  Rank #1 Educator
+                  Rank #{teacherRank} Educator
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -73,13 +79,13 @@ export default function TeacherDetailPage() {
           <div className="p-4 bg-slate-800 rounded-xl border border-slate-700 text-right">
             <div className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">Teacher Performance Index</div>
             <div className="text-3xl font-extrabold text-amber-400 mt-0.5">{teacher.performanceBreakdown.score}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">+11.4% Cohort Growth (Top School Benchmark)</div>
+            <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">{cohortGrowthSign}{cohortGrowth}% Cohort Growth (School Benchmark)</div>
           </div>
         </div>
 
-        {/* Teacher "WHY #1" Analysis */}
+        {/* Teacher Analysis */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-slate-900">Why is {teacher.name} Rank #1? (Weighted Model Breakdown)</h2>
+          <h2 className="text-sm font-bold text-slate-900">Why is {teacher.name} Rank #{teacherRank}? (Weighted Model Breakdown)</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
             <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-center">
               <div className="text-[10px] font-bold text-blue-700 uppercase">Student Improvement (35%)</div>

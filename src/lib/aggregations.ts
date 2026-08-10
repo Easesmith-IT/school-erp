@@ -8,36 +8,40 @@ import {
   AgingBuckets,
   DashboardMetrics,
 } from '@/types/schema';
+import { DEMO_DATE, INTELLIGENCE_CONFIG } from './config/intelligence-config';
 
-export const DEMO_DATE = '2026-08-09';
+export { DEMO_DATE };
 
 // --- ATTENDANCE AGGREGATIONS ---
 
 export function getSchoolAttendanceSummary(students: Student[]) {
-  if (!students.length) return { avgAttendance: 0, presentToday: 0, healthy: 0, atRisk: 0, critical: 0, below75: 0, below60: 0 };
+  if (!students.length) {
+    return { avgAttendance: 0, presentToday: 0, healthyAttendanceCount: 0, healthy: 0, atRisk: 0, critical: 0, below75: 0, below60: 0 };
+  }
   const totalAtt = students.reduce((acc, s) => acc + s.discipline.attendancePercentage, 0);
   const avgAttendance = Number((totalAtt / students.length).toFixed(1));
   
   // Mutually exclusive attendance categories
-  const healthy = students.filter((s) => s.discipline.attendancePercentage >= 75).length;
-  const atRisk = students.filter((s) => s.discipline.attendancePercentage >= 60 && s.discipline.attendancePercentage < 75).length;
-  const critical = students.filter((s) => s.discipline.attendancePercentage < 60).length;
+  const healthy = students.filter((s) => s.discipline.attendancePercentage >= INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD).length;
+  const atRisk = students.filter(
+    (s) => s.discipline.attendancePercentage >= INTELLIGENCE_CONFIG.ATTENDANCE_CRITICAL_THRESHOLD && s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD
+  ).length;
+  const critical = students.filter((s) => s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_CRITICAL_THRESHOLD).length;
 
   const below75 = atRisk + critical;
   const below60 = critical;
-  const presentToday = healthy;
+  const healthyAttendanceCount = healthy;
 
-  return { avgAttendance, presentToday, healthy, atRisk, critical, below75, below60 };
+  return { avgAttendance, presentToday: healthyAttendanceCount, healthyAttendanceCount, healthy, atRisk, critical, below75, below60 };
 }
 
 export function getSchoolAcademicTrendSummary(students: Student[]) {
   if (!students.length) {
     return [
-      { term: 'PA-I', avgScore: 74.2 },
-      { term: 'PA-II', avgScore: 76.4 },
-      { term: 'SA-I', avgScore: 77.5 },
-      { term: 'SA-II', avgScore: 78.1 },
-      { term: 'Current', avgScore: 78.6 },
+      { term: 'PA-I', avgScore: 0 },
+      { term: 'PA-II', avgScore: 0 },
+      { term: 'SA-I', avgScore: 0 },
+      { term: 'Current', avgScore: 0 },
     ];
   }
 
@@ -51,7 +55,6 @@ export function getSchoolAcademicTrendSummary(students: Student[]) {
     { term: 'PA-I', avgScore: Number((pa1Sum / count).toFixed(1)) },
     { term: 'PA-II', avgScore: Number((pa2Sum / count).toFixed(1)) },
     { term: 'SA-I', avgScore: Number((sa1Sum / count).toFixed(1)) },
-    { term: 'SA-II', avgScore: Number(((sa1Sum + currentSum) / (2 * count)).toFixed(1)) },
     { term: 'Current', avgScore: Number((currentSum / count).toFixed(1)) },
   ];
 }
@@ -73,6 +76,10 @@ export function getClassAttendanceSummary(students: Student[]) {
 
 export function getMonthlyAttendanceTrend(students: Student[]) {
   const months = ['Apr', 'May', 'Jul', 'Aug'];
+  const overallAvg = students.length
+    ? Number((students.reduce((acc, s) => acc + s.discipline.attendancePercentage, 0) / students.length).toFixed(1))
+    : 0;
+
   return months.map((m) => {
     let sum = 0;
     let count = 0;
@@ -85,7 +92,7 @@ export function getMonthlyAttendanceTrend(students: Student[]) {
     });
     return {
       month: m,
-      attendanceRate: count ? Number((sum / count).toFixed(1)) : 91.8,
+      attendanceRate: count ? Number((sum / count).toFixed(1)) : overallAvg,
     };
   });
 }
@@ -128,7 +135,7 @@ export function getSubjectPerformanceSummary(students: Student[]) {
   };
 
   return subjects.map((sub) => {
-    const sum = students.reduce((acc, s) => acc + (s.academics[sub] || 75), 0);
+    const sum = students.reduce((acc, s) => acc + (s.academics[sub] || 0), 0);
     return {
       subjectKey: sub,
       subjectName: labels[sub],
@@ -164,11 +171,14 @@ export function getInterventionQueue(students: Student[]) {
     .filter((s) => s.riskLevel !== 'Low')
     .map((s) => {
       let recommendedAction = 'Academic support';
-      if (s.discipline.attendancePercentage < 70 && s.discipline.homeworkCompletionPercentage < 60) {
+      if (
+        s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_CRITICAL_THRESHOLD + 10 &&
+        s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD
+      ) {
         recommendedAction = 'Parent meeting & Intervention';
-      } else if (s.discipline.attendancePercentage < 75) {
+      } else if (s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD) {
         recommendedAction = 'Attendance counseling';
-      } else if (s.discipline.homeworkCompletionPercentage < 60) {
+      } else if (s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD) {
         recommendedAction = 'Homework completion review';
       }
       return {
@@ -244,7 +254,6 @@ export function getCollectionRate(collected: number, expected: number): number {
 }
 
 export function getCollectionVelocity(payments: PaymentRecord[], invoices: FeeInvoice[]) {
-  // Aggregate actual payment dates by month
   const monthMap: Record<string, { collected: number; count: number }> = {};
   payments.forEach((p) => {
     const d = new Date(p.paymentDate);
@@ -327,10 +336,10 @@ export function getClassWiseCollectionSummary(students: Student[], invoices: Fee
 // --- PARENT RELIABILITY AGGREGATIONS ---
 
 export function getParentReliabilityDistribution(parents: Parent[]) {
-  const high = parents.filter((p) => p.paymentReliabilityScore >= 80).length; // 80-100
-  const good = parents.filter((p) => p.paymentReliabilityScore >= 70 && p.paymentReliabilityScore < 80).length; // 70-79
-  const moderate = parents.filter((p) => p.paymentReliabilityScore >= 60 && p.paymentReliabilityScore < 70).length; // 60-69
-  const low = parents.filter((p) => p.paymentReliabilityScore < 60).length; // <60 High Risk
+  const high = parents.filter((p) => p.paymentReliabilityScore >= 80).length;
+  const good = parents.filter((p) => p.paymentReliabilityScore >= 70 && p.paymentReliabilityScore < 80).length;
+  const moderate = parents.filter((p) => p.paymentReliabilityScore >= 60 && p.paymentReliabilityScore < 70).length;
+  const low = parents.filter((p) => p.paymentReliabilityScore < 60).length;
 
   return {
     high,
@@ -359,13 +368,20 @@ export function getClassHealthComparison(students: Student[], teachers: Teacher[
   const perfSummaries = getClassPerformanceSummary(students);
   return perfSummaries.map((c) => {
     const assignedTeacher = teachers.find((t) => t.assignedClasses.includes(c.className));
-    const growth = c.className === '8-A' ? 8.4 : Number((((c.avgPerformance - 70) / 70) * 100).toFixed(1));
+    const classStudents = students.filter((s) => s.className === c.className);
+    let growth = 0;
+    if (classStudents.length > 0) {
+      const avgCurr = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / classStudents.length;
+      const avgPa1 = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / classStudents.length;
+      growth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+    }
+
     return {
       ...c,
       teacherName: assignedTeacher?.name || 'Unassigned',
       teacherId: assignedTeacher?.id || '',
-      teacherIndex: assignedTeacher?.performanceBreakdown.score || 80,
-      cohortGrowth: assignedTeacher?.name === 'Priya Sharma' ? 11.4 : growth,
+      teacherIndex: assignedTeacher?.performanceBreakdown.score || 0,
+      cohortGrowth: growth,
     };
   });
 }
@@ -403,6 +419,13 @@ export function getTeacherCohortBreakdown(teacher: Teacher, students: Student[])
   const improvingStudents = assignedStudents.filter((s) => (s.assessmentTrend?.current || 0) > (s.assessmentTrend?.pa1 || 0));
   const decliningStudents = assignedStudents.filter((s) => (s.assessmentTrend?.current || 0) < (s.assessmentTrend?.pa1 || 0));
 
+  let cohortGrowth = 0;
+  if (assignedStudents.length > 0) {
+    const avgCurr = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / assignedStudents.length;
+    const avgPa1 = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / assignedStudents.length;
+    cohortGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+  }
+
   return {
     teacherId: teacher.id,
     teacherName: teacher.name,
@@ -415,7 +438,7 @@ export function getTeacherCohortBreakdown(teacher: Teacher, students: Student[])
     atRiskStudents,
     improvingCount: improvingStudents.length,
     decliningCount: decliningStudents.length,
-    cohortGrowth: teacher.name === 'Priya Sharma' ? 11.4 : 6.2,
+    cohortGrowth,
   };
 }
 
@@ -437,7 +460,7 @@ export function getTeacherPerformanceBreakdown(teacher: Teacher) {
 // --- STUDENT DETAILED ANALYSIS SELECTORS ---
 
 export function getStudentPerformanceTrend(student: Student) {
-  const trend = student.assessmentTrend || { pa1: 75, pa2: 78, sa1: 80, current: student.performanceBreakdown.score };
+  const trend = student.assessmentTrend || { pa1: student.performanceBreakdown.score, pa2: student.performanceBreakdown.score, sa1: student.performanceBreakdown.score, current: student.performanceBreakdown.score };
   const overallImprovement = Number((trend.current - trend.pa1).toFixed(1));
 
   const subjectTrends = [
@@ -469,7 +492,7 @@ export function getStudentAttendanceAnalysis(student: Student) {
   }
 
   const currentStreak = student.discipline.attendancePercentage >= 90 ? 14 : student.discipline.attendancePercentage >= 75 ? 5 : 1;
-  const absencePattern = student.discipline.attendancePercentage < 75 ? 'Chronic absenteeism & Friday pattern' : 'Consistent attendance';
+  const absencePattern = student.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD ? 'Chronic absenteeism pattern' : 'Consistent attendance';
 
   return {
     attendancePercentage: student.discipline.attendancePercentage,
@@ -489,10 +512,10 @@ export function getStudentHomeworkAnalysis(student: Student) {
   let mostConsistentSubject = 'Mathematics';
   let mostIncompleteSubject = 'Science';
 
-  if (hwCompletion < 60) {
+  if (hwCompletion < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD) {
     mostIncompleteSubject = 'Science & Mathematics';
     mostConsistentSubject = 'English';
-  } else if (hwCompletion > 85) {
+  } else if (hwCompletion > INTELLIGENCE_CONFIG.HOMEWORK_TARGET_THRESHOLD) {
     mostConsistentSubject = 'Mathematics & English';
     mostIncompleteSubject = 'Hindi';
   }
@@ -520,13 +543,13 @@ export function computeDashboardMetrics(
     (students.reduce((acc, s) => acc + s.discipline.attendancePercentage, 0) / (totalStudents || 1)).toFixed(1)
   );
 
-  const totalFeeCollected = getTotalCollectedFees(payments); // ₹14,200,000 (₹1.42 Cr)
-  const totalOutstanding = getTotalOutstanding(invoices);   // ₹4,230,000 (₹42.3 L)
-  const totalFeeExpected = totalFeeCollected + totalOutstanding; // ₹18,430,000 (₹1.843 Cr)
-  const collectionRate = getCollectionRate(totalFeeCollected, totalFeeExpected); // 77.0%
+  const totalFeeCollected = getTotalCollectedFees(payments);
+  const totalOutstanding = getTotalOutstanding(invoices);
+  const totalFeeExpected = totalFeeCollected + totalOutstanding;
+  const collectionRate = getCollectionRate(totalFeeCollected, totalFeeExpected);
 
   const agingBuckets = getAgingBreakdown(invoices);
-  const totalOverdue = getTotalOverdue(agingBuckets); // ₹2,980,000 (₹29.8 L)
+  const totalOverdue = getTotalOverdue(agingBuckets);
 
   const highRiskCount = students.filter((s) => s.riskLevel === 'High').length;
   const mediumRiskCount = students.filter((s) => s.riskLevel === 'Medium').length;

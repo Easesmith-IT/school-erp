@@ -24,7 +24,7 @@ export default function AgingAnalysisPage() {
       row.students.add(i.studentId);
       map.set(i.parentId, row);
     });
-    return [...map.values()].filter((f) => f.overdue > 0).sort((a, b) => (b.ninety * 2 + b.overdue) - (a.ninety * 2 + a.overdue)).slice(0, 8);
+    return Array.from(map.values()).filter((f) => f.overdue > 0).sort((a, b) => (b.ninety * 2 + b.overdue) - (a.ninety * 2 + a.overdue)).slice(0, 8);
   }, [invoices]);
 
   const buckets = [

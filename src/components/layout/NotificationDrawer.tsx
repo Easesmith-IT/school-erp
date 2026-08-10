@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { X, AlertCircle, TrendingDown, DollarSign, Award, Bell } from 'lucide-react';
 import { store } from '@/lib/store';
+import { INTELLIGENCE_CONFIG } from '@/lib/config/intelligence-config';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -15,8 +16,13 @@ export function NotificationDrawer({ isOpen, onClose }: NotificationDrawerProps)
 
   const metrics = store.getMetrics();
   const students = store.getStudents();
+  const teachers = store.getTeachers();
   const atRiskStudents = students.filter((s) => s.riskLevel !== 'Low');
-  const highPriorityParents = store.getParents().filter((p) => p.familyTotalOutstanding >= 15000);
+  const highPriorityParents = store.getParents().filter((p) => p.familyTotalOutstanding >= INTELLIGENCE_CONFIG.RECOVERY_HIGH_VALUE_THRESHOLD);
+
+  const sortedTeachers = [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
+  const topTeacher = sortedTeachers[0];
+  const belowTargetCount = teachers.filter((t) => t.performanceBreakdown.score < INTELLIGENCE_CONFIG.TEACHER_TARGET_THRESHOLD).length;
 
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-80 bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col">
@@ -46,7 +52,7 @@ export function NotificationDrawer({ isOpen, onClose }: NotificationDrawerProps)
                 {atRiskStudents.length} Students Require Attention
               </div>
               <div className="text-[11px] text-amber-400/80 mt-1">
-                {metrics.highRiskCount} High Risk, {metrics.mediumRiskCount} Medium Risk flagged across 16 classes.
+                {metrics.highRiskCount} High Risk, {metrics.mediumRiskCount} Medium Risk flagged across classes.
               </div>
             </div>
           </div>
@@ -81,10 +87,11 @@ export function NotificationDrawer({ isOpen, onClose }: NotificationDrawerProps)
             <Award className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
             <div>
               <div className="text-xs font-semibold text-blue-200">
-                3 Teachers Performance Review
+                {belowTargetCount} Faculty Members Below Target
               </div>
               <div className="text-[11px] text-blue-400/80 mt-1">
-                Priya Sharma ranked #1 (91.4 Index). 3 teachers require academic improvement reviews.
+                {topTeacher ? `${topTeacher.name} leads with ${topTeacher.performanceBreakdown.score} Index. ` : ''}
+                {belowTargetCount} teachers require academic improvement reviews.
               </div>
             </div>
           </div>
@@ -100,19 +107,14 @@ export function NotificationDrawer({ isOpen, onClose }: NotificationDrawerProps)
             <TrendingDown className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
             <div>
               <div className="text-xs font-semibold text-purple-200">
-                Homework Completion Dip
+                Homework Completion Review
               </div>
               <div className="text-[11px] text-purple-400/80 mt-1">
-                Class 8-A Riya Sharma homework completion at 54% (Critical threshold).
+                Discipline indicators tracked across all registered class sections.
               </div>
             </div>
           </div>
         </Link>
-      </div>
-
-      {/* Footer */}
-      <div className="p-3 border-t border-slate-800 bg-slate-950 text-center text-[11px] text-slate-500">
-        System Alerts Anchor: 2026-08-09
       </div>
     </div>
   );

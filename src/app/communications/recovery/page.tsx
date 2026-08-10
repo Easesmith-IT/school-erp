@@ -3,12 +3,16 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { store } from '@/lib/store';
-import { Send, AlertCircle, DollarSign, CheckCircle2, ShieldAlert, X, MessageSquare } from 'lucide-react';
+import { Send, CheckCircle2, X } from 'lucide-react';
 import Link from 'next/link';
+import { DEMO_DATE, INTELLIGENCE_CONFIG } from '@/lib/config/intelligence-config';
 
 export default function OverdueRecoveryQueuePage() {
   const parents = store.getParents().filter((p) => p.familyTotalOutstanding > 0);
   const metrics = store.getMetrics();
+  const invoices = store.getInvoices();
+  const students = store.getStudents();
+  const demoTime = new Date(DEMO_DATE).getTime();
 
   const [activeStage, setActiveStage] = useState<'All' | 'Upcoming' | 'Reminder Sent' | 'First Follow-up' | 'Second Follow-up' | 'Escalated'>('All');
   
@@ -34,7 +38,7 @@ export default function OverdueRecoveryQueuePage() {
     setDispatching(true);
     try {
       const parentRecord = store.getParentById(selectedParent.id);
-      const studentId = parentRecord?.childrenIds[0] || 'student-aarav';
+      const studentId = parentRecord?.childrenIds[0] || (students[0]?.id || '');
       const res = await fetch('/api/communications/fee-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,7 +46,7 @@ export default function OverdueRecoveryQueuePage() {
           parentId: selectedParent.id,
           studentId: studentId,
           type: 'Overdue Fee',
-          customTemplate: `Dear ${selectedParent.name}, your total family fee payment of ₹${selectedParent.amount.toLocaleString('en-IN')} for ${selectedParent.studentName} is overdue. Please settle via NIWA link: https://niwa.school.demo/pay`,
+          customTemplate: `Dear ${selectedParent.name}, your total family fee payment of ₹${selectedParent.amount.toLocaleString('en-IN')} for ${selectedParent.studentName} is overdue. Please settle via link: https://niwa.school.demo/pay`,
         }),
       });
       const data = await res.json();
@@ -55,10 +59,10 @@ export default function OverdueRecoveryQueuePage() {
         parentId: selectedParent.id,
         parentName: selectedParent.name,
         studentId: studentId,
-        studentName: selectedParent.studentName || 'Aarav Sharma',
+        studentName: selectedParent.studentName || 'Student',
         type: 'Overdue Fee',
         recipientPhone: selectedParent.phone,
-        template: `Dear ${selectedParent.name}, your total family fee payment of ₹${selectedParent.amount.toLocaleString('en-IN')} is overdue. Please settle via NIWA link.`,
+        template: `Dear ${selectedParent.name}, your total family fee payment of ₹${selectedParent.amount.toLocaleString('en-IN')} is overdue. Please settle via link.`,
         mode: 'DEMO',
         status: 'SIMULATED',
         referenceId: ref,
@@ -81,8 +85,8 @@ export default function OverdueRecoveryQueuePage() {
     if (activeStage === 'Reminder Sent') return Boolean(dispatchedMap[p.id]);
     if (activeStage === 'Upcoming') return p.familyTotalOutstanding < 10000 && !dispatchedMap[p.id];
     if (activeStage === 'First Follow-up') return p.paymentReliabilityScore >= 70 && p.familyTotalOutstanding >= 10000;
-    if (activeStage === 'Second Follow-up') return p.paymentReliabilityScore < 70 && p.familyTotalOutstanding < 18000;
-    if (activeStage === 'Escalated') return p.paymentReliabilityScore < 65 || p.familyTotalOutstanding >= 18000;
+    if (activeStage === 'Second Follow-up') return p.paymentReliabilityScore < 70 && p.familyTotalOutstanding < INTELLIGENCE_CONFIG.RECOVERY_HIGH_VALUE_THRESHOLD;
+    if (activeStage === 'Escalated') return p.paymentReliabilityScore < 65 || p.familyTotalOutstanding >= INTELLIGENCE_CONFIG.RECOVERY_HIGH_VALUE_THRESHOLD;
     return true;
   });
 
@@ -124,7 +128,7 @@ export default function OverdueRecoveryQueuePage() {
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500">High Priority Accounts</div>
             <div className="text-2xl font-extrabold text-amber-600 mt-1">
-              {parents.filter((p) => p.familyTotalOutstanding >= 15000).length}
+              {parents.filter((p) => p.familyTotalOutstanding >= INTELLIGENCE_CONFIG.RECOVERY_HIGH_VALUE_THRESHOLD).length}
             </div>
             <div className="text-[11px] text-amber-800 font-semibold mt-0.5">₹15,000+ outstanding</div>
           </div>
@@ -169,20 +173,31 @@ export default function OverdueRecoveryQueuePage() {
                 ) : (
                   filteredParents.slice(0, 15).map((p) => {
                     const ref = dispatchedMap[p.id];
-                    const isRaj = p.id === 'parent-raj';
+                    const parentInvoices = invoices.filter((inv: any) => inv.parentId === p.id && inv.outstandingBalance > 0);
+                    let maxOverdueDays = 0;
+                    parentInvoices.forEach((inv: any) => {
+                      const dTime = new Date(inv.dueDate).getTime();
+                      if (dTime < demoTime) {
+                        const days = Math.floor((demoTime - dTime) / 86400000);
+                        if (days > maxOverdueDays) maxOverdueDays = days;
+                      }
+                    });
+
+                    const children = students.filter((s) => s.parentId === p.id);
+                    const studentNames = children.map((c) => c.name).join(' & ') || 'Student';
 
                     return (
-                      <tr key={p.id} className={`hover:bg-slate-50 ${isRaj ? 'bg-amber-50/50' : ''}`}>
+                      <tr key={p.id} className="hover:bg-slate-50">
                         <td className="py-3 px-3">
                           <div className="font-bold text-slate-900">{p.name}</div>
-                          {isRaj && <span className="text-[10px] font-bold text-amber-800">Parent of Aarav & Riya</span>}
+                          {children.length > 0 && <span className="text-[10px] text-slate-500 font-medium">Parent of {studentNames}</span>}
                         </td>
                         <td className="py-3 px-3 text-slate-500">{p.phone}</td>
                         <td className="py-3 px-3 font-bold text-blue-600">{p.paymentReliabilityScore}/100</td>
                         <td className="py-3 px-3 font-extrabold text-amber-900 text-sm">₹{p.familyTotalOutstanding.toLocaleString('en-IN')}</td>
                         <td className="py-3 px-3">
                           <span className="px-2 py-0.5 bg-red-100 text-red-800 font-bold text-[10px] rounded-full">
-                            {isRaj ? '91 Days Overdue' : 'Overdue'}
+                            {maxOverdueDays > 0 ? `${maxOverdueDays} Days Overdue` : 'Overdue'}
                           </span>
                         </td>
                         <td className="py-3 px-3">
@@ -193,7 +208,7 @@ export default function OverdueRecoveryQueuePage() {
                             </div>
                           ) : (
                             <button
-                              onClick={() => handleOpenModal(p.id, p.name, p.familyTotalOutstanding, p.phone, isRaj ? 'Aarav & Riya Sharma' : 'Student')}
+                              onClick={() => handleOpenModal(p.id, p.name, p.familyTotalOutstanding, p.phone, studentNames)}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded shadow-xs transition-colors flex items-center gap-1.5"
                             >
                               <Send className="w-3 h-3" />
@@ -210,49 +225,57 @@ export default function OverdueRecoveryQueuePage() {
           </div>
         </div>
 
-        {/* NIWA Dispatch Confirmation Modal */}
+        {/* Dispatch Confirmation Modal */}
         {selectedParent && (
-          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-slate-200 w-full max-w-md rounded-xl shadow-2xl overflow-hidden space-y-4">
-              <div className="bg-slate-950 p-4 text-white flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-emerald-400" />
-                  <h3 className="font-bold text-sm text-white">Send Fee Reminder via NIWA</h3>
-                </div>
-                <button onClick={() => setSelectedParent(null)} className="text-slate-400 hover:text-white">
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl border border-slate-100 p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="font-bold text-slate-900 text-sm">Confirm Communication Dispatch</h3>
+                <button onClick={() => setSelectedParent(null)} className="p-1 text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-4 space-y-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
-                  <div><span className="text-slate-500">Parent Name:</span> <strong className="text-slate-900">{selectedParent.name}</strong></div>
-                  <div><span className="text-slate-500">Phone Contact:</span> <strong className="text-slate-900 font-mono">{selectedParent.phone}</strong></div>
-                  <div><span className="text-slate-500">Family Outstanding:</span> <strong className="text-amber-900 font-bold">₹{selectedParent.amount.toLocaleString('en-IN')}</strong></div>
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="flex justify-between">
+                  <span>Recipient:</span>
+                  <strong className="text-slate-900">{selectedParent.name}</strong>
                 </div>
-
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600">WhatsApp Message Content:</span>
-                  <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg text-emerald-950 font-mono text-[11px]">
-                    Dear {selectedParent.name}, your total family fee payment of ₹{selectedParent.amount.toLocaleString('en-IN')} for {selectedParent.studentName} is overdue. Please settle via NIWA link: https://niwa.school.demo/pay
-                  </div>
+                <div className="flex justify-between">
+                  <span>Phone Number:</span>
+                  <strong className="text-slate-900">{selectedParent.phone}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Student(s):</span>
+                  <strong className="text-slate-900">{selectedParent.studentName}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Amount Outstanding:</span>
+                  <strong className="text-amber-800 font-extrabold">₹{selectedParent.amount.toLocaleString('en-IN')}</strong>
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600 font-mono">
+                Dear {selectedParent.name}, your total family fee payment of ₹{selectedParent.amount.toLocaleString('en-IN')} for {selectedParent.studentName} is overdue. Please settle via link.
+              </div>
+
+              <div className="text-[10px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                Mode: DEMO / Status: SIMULATED. Executing this dispatch will register a simulated WhatsApp delivery log in the communication audit ledger.
+              </div>
+
+              <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => setSelectedParent(null)}
-                  className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg"
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmDispatch}
                   disabled={dispatching}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{dispatching ? 'Dispatching via NIWA...' : 'Send via NIWA'}</span>
+                  {dispatching ? 'Dispatching...' : 'Confirm Dispatch'}
                 </button>
               </div>
             </div>

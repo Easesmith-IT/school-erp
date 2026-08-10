@@ -6,6 +6,7 @@ import {
   getClassPerformanceSummary,
 } from './aggregations';
 import { formatLakhs, formatCrores } from './formatters';
+import { DEMO_DATE, INTELLIGENCE_CONFIG } from './config/intelligence-config';
 
 export type InsightType =
   | 'STUDENT_RISK'
@@ -53,19 +54,19 @@ export function getSchoolHealthOverview(
 ): SchoolHealthOverview {
   const avgTeacherPerf = teachers.length
     ? Number((teachers.reduce((acc, t) => acc + t.performanceBreakdown.score, 0) / teachers.length).toFixed(1))
-    : 84.2;
+    : 0;
 
   const atRiskCount = students.filter((s) => s.riskLevel !== 'Low').length;
 
   return {
-    academicScore: metrics.avgPerformance, // 78.6%
-    attendanceScore: metrics.avgAttendance, // 91.8%
-    financialScore: metrics.collectionRate, // 77.0%
+    academicScore: metrics.avgPerformance,
+    attendanceScore: metrics.avgAttendance,
+    financialScore: metrics.collectionRate,
     riskStatus: atRiskCount > 50 ? 'Attention Required' : 'Healthy',
     teacherPerformanceScore: avgTeacherPerf,
-    academicNote: 'Current academic term average score',
-    attendanceNote: 'Current school attendance average',
-    financialNote: 'Fee collection rate reconciled to date',
+    academicNote: 'Current academic term average score across all enrolled students',
+    attendanceNote: 'Current school-wide attendance average percentage',
+    financialNote: 'Fee collection rate reconciled against total expected fees',
     riskNote: `${atRiskCount} students currently flagged for academic/discipline risk`,
     teacherNote: `Average teacher performance index across ${teachers.length} faculty members`,
   };
@@ -80,11 +81,13 @@ export function getManagementInsights(
   metrics: DashboardMetrics
 ): Insight[] {
   const insights: Insight[] = [];
+  const demoTime = new Date(DEMO_DATE).getTime();
 
-  // 1. High Risk Students Insight (e.g., Riya Sharma)
-  const highRiskStudents = students.filter((s) => s.riskLevel === 'High');
+  // 1. High Risk Students Insight
   const dualRiskCount = students.filter(
-    (s) => s.discipline.attendancePercentage < 75 && s.discipline.homeworkCompletionPercentage < 60
+    (s) =>
+      s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD &&
+      s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD
   ).length;
 
   insights.push({
@@ -92,17 +95,18 @@ export function getManagementInsights(
     type: 'STUDENT_RISK',
     severity: 'HIGH',
     title: `${metrics.studentsAtRiskCount} students require academic attention`,
-    description: `${dualRiskCount} students show both attendance and homework deterioration.`,
+    description: `${dualRiskCount} students show dual attendance and homework completion decline.`,
     whyItMatters:
-      'Combined attendance and homework decline is the single highest predictor of academic failure and term retention loss.',
+      'Students exhibiting simultaneous attendance and homework completion decline display multiple active intervention indicators.',
     actionLabel: 'Review At-Risk Students',
     actionRoute: '/students/risk',
-    factText: `${dualRiskCount} students have attendance < 75% and homework completion < 60%.`,
-    interpretationText: 'Multiple intervention indicators are active. Immediate coordinator check required.',
+    factText: `${dualRiskCount} students have attendance < ${INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD}% and homework completion < ${INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD}%.`,
+    interpretationText: 'Multiple intervention indicators are active. Immediate coordinator review recommended.',
+    sourceEntityType: 'Student',
   });
 
   // 2. Overdue Fees Aging Insight
-  const aging = getAgingBreakdown(invoices);
+  const aging = getAgingBreakdown(invoices, DEMO_DATE);
   const overdueLakhs = (metrics.totalOverdue / 100000).toFixed(1);
   const ninetyPlusLakhs = (aging.days90Plus / 100000).toFixed(1);
 
@@ -113,65 +117,100 @@ export function getManagementInsights(
     title: `₹${ninetyPlusLakhs}L in 90+ day overdue fee bucket`,
     description: `Total overdue balance stands at ₹${overdueLakhs}L across all fee terms.`,
     whyItMatters:
-      'Fees in the 90+ day aging bucket have a 64% lower natural recovery rate without structured management intervention.',
+      'Accounts past 90 days represent critical overdue balances requiring structured recovery review.',
     actionLabel: 'Review Recovery Queue',
     actionRoute: '/finance/aging',
     factText: `₹${ninetyPlusLakhs}L is 90+ days past due date out of ₹${overdueLakhs}L total overdue.`,
     interpretationText: 'This is the highest-risk financial aging segment requiring executive recovery workflow.',
+    sourceEntityType: 'Finance',
   });
 
-  // 3. Class 8-A Performance & Growth
+  // 3. Top Class Performance & Growth
   const classSummaries = getClassPerformanceSummary(students);
-  const class8A = classSummaries.find((c) => c.className === 'Class 8-A' || c.className === '8-A');
-  if (class8A) {
+  if (classSummaries.length > 0) {
+    const topClass = classSummaries[0];
+    const classStudents = students.filter((s) => s.className === topClass.className);
+    let classGrowth = 0;
+    if (classStudents.length > 0) {
+      const avgCurr = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / classStudents.length;
+      const avgPa1 = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / classStudents.length;
+      classGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+    }
+    const sign = classGrowth >= 0 ? '+' : '';
+
     insights.push({
-      id: 'insight-class-8a-growth',
+      id: 'insight-class-top-growth',
       type: 'CLASS_PERFORMANCE',
       severity: 'LOW',
-      title: 'Class 8-A has improved +8.4% this term',
-      description: `Class 8-A average score reached ${class8A.avgPerformance}% with ${class8A.avgAttendance}% attendance.`,
+      title: `Class ${topClass.className} performance score reached ${topClass.avgPerformance}%`,
+      description: `Class ${topClass.className} shows ${sign}${classGrowth}% assessment movement with ${topClass.avgAttendance}% attendance.`,
       whyItMatters:
-        'Targeted math problem-set completion and proactive teacher follow-up led to measurable score growth.',
-      actionLabel: 'Explore Class 8-A',
-      actionRoute: '/students/class?from=class-8a',
-      factText: 'Class 8-A cohort performance score increased by +8.4% over baseline.',
-      interpretationText: 'Class cohort strategy is outperforming school average benchmark.',
+        'Class cohort performance tracking identifies section-level academic movement across terms.',
+      actionLabel: `Explore Class ${topClass.className}`,
+      actionRoute: `/students/class?from=class-${topClass.className.toLowerCase().replace(/\s+/g, '')}`,
+      factText: `Class ${topClass.className} cohort average performance score is ${topClass.avgPerformance}%.`,
+      interpretationText: 'Class cohort average is leading school performance benchmark.',
+      sourceEntityType: 'Class',
+      sourceEntityId: topClass.className,
     });
   }
 
-  // 4. Priya Sharma Faculty Insight
-  const priya = teachers.find((t) => t.name === 'Priya Sharma');
-  if (priya) {
+  // 4. Top Faculty Educator Insight
+  if (teachers.length > 0) {
+    const sortedTeachers = [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
+    const topTeacher = sortedTeachers[0];
+    const assignedStudents = students.filter((s) => topTeacher.assignedClasses.includes(s.className));
+    let tGrowth = 0;
+    if (assignedStudents.length > 0) {
+      const avgCurr = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / assignedStudents.length;
+      const avgPa1 = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / assignedStudents.length;
+      tGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+    }
+    const tSign = tGrowth >= 0 ? '+' : '';
+
     insights.push({
-      id: 'insight-teacher-priya',
+      id: 'insight-teacher-top',
       type: 'TEACHER',
       severity: 'LOW',
-      title: "Priya Sharma's cohort improved +11.4%",
-      description: `Priya Sharma holds Performance Index ${priya.performanceBreakdown.score} (Rank #1).`,
+      title: `${topTeacher.name} assigned cohort shows ${tSign}${tGrowth}% assessment movement`,
+      description: `${topTeacher.name} holds Performance Index ${topTeacher.performanceBreakdown.score} (Rank #1).`,
       whyItMatters:
-        'Priya Sharma’s structured homework verification model is driving student improvement across Class 8-A and 8-B.',
-      actionLabel: 'View Teacher #1 Analysis',
-      actionRoute: `/teachers/${priya.id}`,
-      factText: 'Teacher Priya Sharma leads school with 91.4 Performance Index and +11.4% cohort growth.',
-      interpretationText: 'Faculty peer benchmark for academic outcome delivery.',
+        'Teacher index evaluation combines student improvement, academic score, attendance, and work completion.',
+      actionLabel: 'View Educator Analysis',
+      actionRoute: `/teachers/${topTeacher.id}`,
+      factText: `Teacher ${topTeacher.name} has ${topTeacher.performanceBreakdown.score} Performance Index score.`,
+      interpretationText: 'Assigned cohort displays top-ranking performance index across measured dimensions.',
+      sourceEntityType: 'Teacher',
+      sourceEntityId: topTeacher.id,
     });
   }
 
-  // 5. Parent Recovery Case Insight (Raj Sharma)
-  const raj = parents.find((p) => p.name === 'Raj Sharma');
-  if (raj) {
+  // 5. Overdue Account Recovery Insight
+  const overdueInvoices = invoices.filter(
+    (inv) => inv.outstandingBalance > 0 && new Date(inv.dueDate).getTime() < demoTime
+  );
+  const overdueParentIds = Array.from(new Set(overdueInvoices.map((inv) => inv.parentId)));
+  const overdueCasesCount = overdueParentIds.length;
+
+  if (parents.length > 0) {
+    const highRelOverdueParent = parents.find(
+      (p) => p.paymentReliabilityScore >= INTELLIGENCE_CONFIG.FEE_CREDIT_HIGH_RELIABILITY_THRESHOLD && p.familyTotalOutstanding > 0
+    ) || parents[0];
+
     insights.push({
-      id: 'insight-parent-raj-recovery',
+      id: 'insight-parent-recovery',
       type: 'RECOVERY',
       severity: 'MEDIUM',
-      title: '28 fee cases require active recovery action',
-      description: `Includes Raj Sharma (₹${(raj.familyTotalOutstanding / 1000).toFixed(1)}k family outstanding, 86 Reliability).`,
+      title: `${overdueCasesCount} fee cases require active recovery action`,
+      description: `Includes ${highRelOverdueParent.name} (₹${(highRelOverdueParent.familyTotalOutstanding / 1000).toFixed(1)}k family outstanding, ${highRelOverdueParent.paymentReliabilityScore} Reliability).`,
       whyItMatters:
-        'Raj Sharma has strong payment reliability (86/100) and historical compliance. A friendly reminder will release funds prompt.',
+        'Parents with high historical payment reliability represent strong candidates for direct communication follow-up.',
       actionLabel: 'Open Recovery Workflow',
       actionRoute: '/communications/recovery',
-      factText: 'Raj Sharma family has ₹18,500 outstanding with 82% historical on-time rate.',
-      interpretationText: 'High-reliability parent with temporary delay. Ideal candidate for WhatsApp workflow.',
+      factText: `${highRelOverdueParent.name} family has ₹${highRelOverdueParent.familyTotalOutstanding.toLocaleString('en-IN')} outstanding.`,
+      interpretationText: 'High-reliability parent account with outstanding balance awaiting follow-up.',
+      sourceEntityType: 'Parent',
+      sourceEntityId: highRelOverdueParent.id,
     });
   }
 
@@ -184,7 +223,17 @@ export function getExecutivePriorityQueue(
   parents: Parent[],
   metrics: DashboardMetrics
 ) {
-  const aging = getAgingBreakdown([]);
+  const demoTime = new Date(DEMO_DATE).getTime();
+  const belowTargetTeachersCount = teachers.filter(
+    (t) => t.performanceBreakdown.score < INTELLIGENCE_CONFIG.TEACHER_TARGET_THRESHOLD
+  ).length;
+
+  const overdueInvoices = (storeInvoices: FeeInvoice[]) =>
+    storeInvoices.filter((inv) => inv.outstandingBalance > 0 && new Date(inv.dueDate).getTime() < demoTime);
+
+  // We derive overdue cases count from students/parents/invoices context
+  const overdueCasesCount = parents.filter((p) => p.familyTotalOutstanding > 0).length;
+
   return [
     {
       id: 'prio-1',
@@ -207,8 +256,8 @@ export function getExecutivePriorityQueue(
     {
       id: 'prio-3',
       severity: 'MEDIUM' as const,
-      title: '3 Faculty Members Below Target Threshold',
-      subtitle: 'Students needing attention in assigned cohorts require coordinator review',
+      title: `${belowTargetTeachersCount} Faculty Members Below Target Threshold`,
+      subtitle: 'Cohorts with performance indicators below target threshold require review',
       actionLabel: 'Review Teachers',
       actionRoute: '/teachers',
       badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -216,8 +265,8 @@ export function getExecutivePriorityQueue(
     {
       id: 'prio-4',
       severity: 'MEDIUM' as const,
-      title: '28 Overdue Cases Awaiting WhatsApp Follow-up',
-      subtitle: 'NIWA communication dispatch queue ready for execution',
+      title: `${overdueCasesCount} Overdue Cases Awaiting Follow-up`,
+      subtitle: 'Communication dispatch queue available for recovery workflow',
       actionLabel: 'Open Recovery',
       actionRoute: '/communications/recovery',
       badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
@@ -231,21 +280,53 @@ export function getPrincipalMorningBrief(
   parents: Parent[],
   metrics: DashboardMetrics
 ) {
+  const classSummaries = getClassPerformanceSummary(students);
+  const topClass = classSummaries[0] || { className: '8-A', avgPerformance: 81.4 };
+  const classStudents = students.filter((s) => s.className === topClass.className);
+  let classGrowth = 0;
+  if (classStudents.length > 0) {
+    const avgCurr = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / classStudents.length;
+    const avgPa1 = classStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / classStudents.length;
+    classGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+  }
+  const classSign = classGrowth >= 0 ? '+' : '';
+
+  const sortedTeachers = [...teachers].sort((a, b) => b.performanceBreakdown.score - a.performanceBreakdown.score);
+  const topTeacher = sortedTeachers[0] || { id: 'teacher-1', name: 'Priya Sharma', performanceBreakdown: { score: 91.4 } };
+  const assignedStudents = students.filter((s) => topTeacher.assignedClasses?.includes(s.className));
+  let tGrowth = 0;
+  if (assignedStudents.length > 0) {
+    const avgCurr = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.current || s.performanceBreakdown.score), 0) / assignedStudents.length;
+    const avgPa1 = assignedStudents.reduce((acc, s) => acc + (s.assessmentTrend?.pa1 || s.performanceBreakdown.score), 0) / assignedStudents.length;
+    tGrowth = avgPa1 > 0 ? Number((((avgCurr - avgPa1) / avgPa1) * 100).toFixed(1)) : 0;
+  }
+  const tSign = tGrowth >= 0 ? '+' : '';
+
+  const dualRiskCount = students.filter(
+    (s) =>
+      s.discipline.attendancePercentage < INTELLIGENCE_CONFIG.ATTENDANCE_RISK_THRESHOLD &&
+      s.discipline.homeworkCompletionPercentage < INTELLIGENCE_CONFIG.HOMEWORK_RISK_THRESHOLD
+  ).length;
+
+  const overdueCasesCount = parents.filter((p) => p.familyTotalOutstanding > 0).length;
+
+  const highRiskStudent = students.find((s) => s.riskLevel === 'High') || students[0];
+
   return {
     goodNews: [
       {
         id: 'gn-1',
-        text: 'Class 8-A improved +8.4% this term, reaching an average academic score of 81.4%.',
+        text: `Class ${topClass.className} shows ${classSign}${classGrowth}% assessment movement, reaching average academic score of ${topClass.avgPerformance}%.`,
         route: '/students/class',
       },
       {
         id: 'gn-2',
-        text: "Priya Sharma's student cohort demonstrated +11.4% improvement, ranking #1 among faculty.",
-        route: '/teachers/teacher-1',
+        text: `${topTeacher.name}'s assigned cohort demonstrated ${tSign}${tGrowth}% assessment movement (Index ${topTeacher.performanceBreakdown.score}, Rank #1).`,
+        route: `/teachers/${topTeacher.id}`,
       },
       {
         id: 'gn-3',
-        text: 'Fee collections reached ₹1.42 Cr (77.0% overall collection rate reconciled).',
+        text: `Fee collections reached ₹${(metrics.totalFeeCollected / 10000000).toFixed(2)} Cr (${metrics.collectionRate}% overall collection rate reconciled).`,
         route: '/finance/dashboard',
       },
     ],
@@ -262,27 +343,27 @@ export function getPrincipalMorningBrief(
       },
       {
         id: 'att-3',
-        text: 'Riya Sharma (Admission #1088) exhibits 68% attendance and 54% homework completion.',
-        route: '/students/student-riya',
+        text: `${highRiskStudent.name} (Admission #${highRiskStudent.admissionNo}) exhibits ${highRiskStudent.discipline.attendancePercentage}% attendance and ${highRiskStudent.discipline.homeworkCompletionPercentage}% homework completion.`,
+        route: `/students/${highRiskStudent.id}`,
       },
     ],
     todayActions: [
       {
         id: 'act-1',
         title: 'Review High-Risk Students',
-        description: 'Conduct coordinator review for 27 students with dual attendance & homework decline.',
+        description: `Conduct coordinator review for ${dualRiskCount} students with dual attendance & homework decline.`,
         route: '/students/risk',
       },
       {
         id: 'act-2',
         title: 'Execute Fee Recovery Dispatches',
-        description: 'Dispatch WhatsApp reminders via NIWA for 28 high-priority overdue cases.',
+        description: `Dispatch reminder messages for ${overdueCasesCount} overdue accounts.`,
         route: '/communications/recovery',
       },
       {
         id: 'act-3',
         title: 'Review Teacher Exceptions',
-        description: 'Check support plan for faculty members with at-risk cohorts.',
+        description: 'Check support plan for faculty members with cohorts needing attention.',
         route: '/teachers',
       },
     ],
