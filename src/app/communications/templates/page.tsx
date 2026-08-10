@@ -1,75 +1,27 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { FileText, CheckCircle2 } from 'lucide-react';
+import { store } from '@/lib/store';
+import { CheckCircle2, FileText, MessageSquare, Zap } from 'lucide-react';
+
+const templates = [
+  { id: 'tmpl-1', name: 'Upcoming Fee Notice', trigger: '7 Days Before Due Date', type: 'Fee Due', content: 'Dear {ParentName}, Q2 Tuition fee notice of ₹{Amount} for {StudentName} is due on {DueDate}. Settle via link: {Link}' },
+  { id: 'tmpl-2', name: 'Overdue Fee Notice', trigger: '1 Day After Due Date', type: 'Overdue Fee', content: 'Dear {ParentName}, fee payment of ₹{Amount} for {StudentName} is overdue. Please remit at your earliest convenience.' },
+  { id: 'tmpl-3', name: 'Fee Credit Facility Offer', trigger: 'High Reliability Score (80+)', type: 'Fee Credit Offer', content: 'Dear {ParentName}, based on your strong payment reliability (86/100), you are eligible for ₹30,000 fee credit facility.' },
+  { id: 'tmpl-4', name: 'PTM & Academic Progress Alert', trigger: 'Academic Dip / Term PTM', type: 'PTM Notice', content: 'Dear {ParentName}, PTM for Class {Class} is scheduled for 15 Aug 2026. Please attend to review {StudentName} progress.' },
+];
 
 export default function ReminderTemplatesPage() {
-  const templates = [
-    {
-      id: 'tmpl-1',
-      name: 'Upcoming Fee Notice',
-      trigger: '7 Days Before Due Date',
-      content: 'Dear {ParentName}, Q2 Tuition fee notice of ₹{Amount} for {StudentName} is due on {DueDate}. Settle via link: {Link}',
-      status: 'Active',
-    },
-    {
-      id: 'tmpl-2',
-      name: 'Overdue Fee Notice',
-      trigger: '1 Day After Due Date',
-      content: 'Dear {ParentName}, fee payment of ₹{Amount} for {StudentName} is overdue. Please remit at your earliest convenience.',
-      status: 'Active',
-    },
-    {
-      id: 'tmpl-3',
-      name: 'Fee Credit Facility Offer',
-      trigger: 'High Reliability Score (80+)',
-      content: 'Dear {ParentName}, based on your strong payment reliability (86/100), you are eligible for ₹30,000 fee credit facility.',
-      status: 'Active',
-    },
-    {
-      id: 'tmpl-4',
-      name: 'PTM & Academic Progress Alert',
-      trigger: 'Academic Dip / Term PTM',
-      content: 'Dear {ParentName}, PTM for Class {Class} is scheduled for 15 Aug 2026. Please attend to review {StudentName} progress.',
-      status: 'Active',
-    },
-  ];
-
-  return (
-    <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Reminder Templates Library</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Approved WhatsApp message templates for automated & manual NIWA dispatch
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {templates.map((tmpl) => (
-            <div key={tmpl.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-600" />
-                  <h2 className="font-bold text-slate-900 text-sm">{tmpl.name}</h2>
-                </div>
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
-                  {tmpl.status}
-                </span>
-              </div>
-
-              <div className="text-[11px] text-slate-500 font-medium">Trigger Rule: <strong className="text-slate-800">{tmpl.trigger}</strong></div>
-
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs font-mono text-slate-700">
-                {tmpl.content}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </AppShell>
-  );
+  const communications = store.getCommunications();
+  const stats = useMemo(() => templates.map((template) => { const rows = communications.filter((c) => c.type === template.type); const delivered = rows.filter((c) => c.status === 'DELIVERED').length; return { ...template, usage: rows.length, delivery: rows.length ? (delivered / rows.length) * 100 : 0 }; }), [communications]);
+  const active = stats.length;
+  const used = stats.filter((t) => t.usage > 0).length;
+  return <AppShell><div className="max-w-[1500px] mx-auto pb-12 space-y-5">
+    <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><div className="text-[11px] uppercase tracking-[0.12em] font-bold text-blue-600 mb-1">Communications / Configuration</div><h1 className="text-2xl font-bold tracking-tight text-[#172033]">Message Templates</h1><p className="text-sm text-slate-500 mt-1">Approved message definitions, trigger rules and observed dispatch performance.</p></div><div className="text-xs text-slate-500">WhatsApp · {communications.length.toLocaleString('en-IN')} dispatch records</div></header>
+    <section className="grid grid-cols-2 lg:grid-cols-4 gap-4"><Metric title="Active Templates" value={active.toString()} sub="Configured in this library" /><Metric title="Used Templates" value={used.toString()} sub="Seen in communication log" tone="emerald" /><Metric title="Dispatches" value={communications.length.toLocaleString('en-IN')} sub="Across all message types" /><Metric title="Channels" value="1" sub="WhatsApp" tone="violet" /></section>
+    <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-semibold text-[#172033]">Template registry</h2><p className="text-xs text-slate-500 mt-0.5">Operational metadata for each approved template.</p></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Template</th><th className="p-3">Trigger</th><th className="p-3">Type</th><th className="p-3">Dispatches</th><th className="p-3">Observed Delivery</th><th className="p-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{stats.map((t) => <tr key={t.id} className="hover:bg-slate-50"><td className="p-3"><div className="font-bold text-slate-900">{t.name}</div><div className="text-[10px] text-slate-400 mt-1">{t.id}</div></td><td className="p-3 text-slate-600">{t.trigger}</td><td className="p-3"><span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold">{t.type}</span></td><td className="p-3 font-bold">{t.usage}</td><td className="p-3 font-semibold text-emerald-600">{t.usage ? `${t.delivery.toFixed(1)}%` : 'No data'}</td><td className="p-3"><span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Active</span></td></tr>)}</tbody></table></div></section>
+    <section className="grid grid-cols-1 md:grid-cols-2 gap-4">{stats.map((t) => <article key={t.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span><h2 className="text-sm font-bold text-slate-900">{t.name}</h2></div><CheckCircle2 className="w-4 h-4 text-emerald-600" /></div><div className="mt-4 grid grid-cols-2 gap-3"><div className="p-3 bg-slate-50 rounded-xl"><div className="text-[10px] uppercase font-bold text-slate-400">Trigger</div><div className="text-xs font-semibold text-slate-800 mt-1">{t.trigger}</div></div><div className="p-3 bg-slate-50 rounded-xl"><div className="text-[10px] uppercase font-bold text-slate-400">Usage</div><div className="text-lg font-extrabold text-slate-900 mt-1">{t.usage}</div></div></div><div className="mt-3 p-3 rounded-xl border border-slate-100 bg-white text-xs font-mono text-slate-600 leading-relaxed">{t.content}</div><div className="mt-3 flex items-center gap-2 text-[10px] text-slate-500"><MessageSquare className="w-3 h-3" /> WhatsApp template <Zap className="w-3 h-3 ml-2 text-amber-500" /> Automated trigger</div></article>)}</section>
+  </div></AppShell>;
 }
+function Metric({ title, value, sub, tone = 'blue' }: { title: string; value: string; sub: string; tone?: 'blue' | 'emerald' | 'violet' }) { const c = tone === 'emerald' ? 'text-emerald-600' : tone === 'violet' ? 'text-violet-600' : 'text-blue-600'; return <div className="bg-white rounded-2xl border border-slate-200 p-5"><div className="text-xs font-semibold text-slate-500">{title}</div><div className={`text-2xl font-extrabold mt-2 ${c}`}>{value}</div><div className="text-[11px] text-slate-500 mt-1">{sub}</div></div>; }
